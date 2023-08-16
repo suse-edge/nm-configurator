@@ -1,0 +1,23 @@
+[connection]
+id             = eth0.101
+uuid           = ad451df9-e022-4ce4-9ba1-4bc691c9abc1
+type           = ethernet
+interface-name = eth0.101
+
+[ethernet]
+
+[ipv4]
+address1       = 192.168.123.3/24
+dns            = 192.168.123.100
+dns-priority   = 40
+method         = manual
+route1         = 0.0.0.0/0,192.168.123.3
+route1_options = table=254
+
+[ipv6]
+addr-gen-mode = eui64
+dhcp-duid     = ll
+dhcp-iaid     = mac
+method        = disabled
+
+[proxy]
