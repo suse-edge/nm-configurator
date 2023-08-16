@@ -9,7 +9,7 @@ import (
 	"github.com/suse-edge/nm-configurator/pkg/configurator"
 )
 
-const systemConnectionsDir = "./etc/NetworkManager/system-connections"
+const systemConnectionsDir = "/etc/NetworkManager/system-connections"
 
 func init() {
 	log.SetFormatter(&log.TextFormatter{
