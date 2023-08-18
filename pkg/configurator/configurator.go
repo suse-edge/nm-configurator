@@ -113,6 +113,11 @@ func (c *Configurator) copyConnectionFiles(host *config.Host) error {
 		if err = file.SaveTo(destination); err != nil {
 			return err
 		}
+
+		// Set the necessary permissions required by NetworkManager.
+		if err = os.Chmod(destination, 0600); err != nil {
+			return err
+		}
 	}
 
 	return nil
