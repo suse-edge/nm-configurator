@@ -1,6 +1,9 @@
 package configurator
 
-import "net"
+import (
+	"net"
+	"strings"
+)
 
 // NetworkInterfaces maps system network interfaces.
 //
@@ -22,7 +25,8 @@ func GetNetworkInterfaces() (NetworkInterfaces, error) {
 			continue
 		}
 
-		interfaceAddresses[i.HardwareAddr.String()] = i.Name
+		address := strings.ToLower(i.HardwareAddr.String())
+		interfaceAddresses[address] = i.Name
 	}
 
 	return interfaceAddresses, nil

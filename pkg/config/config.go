@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -36,6 +37,13 @@ func Load(sourceDir, configFilename, destinationDir string) (*Config, error) {
 	var c Config
 	if err = yaml.Unmarshal(file, &c); err != nil {
 		return nil, err
+	}
+
+	// Ensure lower case formatting.
+	for _, host := range c.Hosts {
+		for _, i := range host.Interfaces {
+			i.MACAddress = strings.ToLower(i.MACAddress)
+		}
 	}
 
 	c.SourceDir = sourceDir
