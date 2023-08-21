@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,9 +23,17 @@ type Host struct {
 	Interfaces []*Interface `yaml:"interfaces"`
 }
 
+func (h *Host) String() string {
+	return fmt.Sprintf("{Name: %s Interfaces: %+v}", h.Name, h.Interfaces)
+}
+
 type Interface struct {
 	LogicalName string `yaml:"logical_name"`
 	MACAddress  string `yaml:"mac_address"`
+}
+
+func (i *Interface) String() string {
+	return fmt.Sprintf("{LogicalName: %s MACAddress: %s}", i.LogicalName, i.MACAddress)
 }
 
 func Load(sourceDir, configFilename, destinationDir string) (*Config, error) {

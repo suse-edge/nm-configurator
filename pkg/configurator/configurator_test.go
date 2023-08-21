@@ -92,7 +92,7 @@ func TestConfigurator_Run(t *testing.T) {
 			localInterfaces: map[string]string{
 				"00:11:22:33:44:57": "eth0",
 			},
-			expectedErr: "copying files: loading file \"testdata/host2/invalid.nmconnection\": key-value delimiter not found: -[connection]\n",
+			expectedErr: "copying files: loading file testdata/host2/invalid.nmconnection: key-value delimiter not found: -[connection]\n",
 		},
 		{
 			name: "configurator fails due to storing to non-existing destination dir",
@@ -114,7 +114,7 @@ func TestConfigurator_Run(t *testing.T) {
 			localInterfaces: map[string]string{
 				"00:11:22:33:44:57": "eth0",
 			},
-			expectedErr: "copying files: open some-non-existing-dir-123/eth0.nmconnection: no such file or directory",
+			expectedErr: "copying files: storing file some-non-existing-dir-123/eth0.nmconnection: open some-non-existing-dir-123/eth0.nmconnection: no such file or directory",
 		},
 		{
 			name: "configurator executed successfully",
