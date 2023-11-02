@@ -24,6 +24,12 @@ fn main() {
                         .long("config-dir")
                         .help("Config dir containing network configurations for different hosts in YAML format"),
                 )
+                .arg(
+                    clap::Arg::new("OUTPUT-DIR")
+                        .default_value("_out")
+                        .long("output-dir")
+                        .help("Destination dir storing the output configurations"),
+                )
         );
 
     let matches = app.get_matches();
@@ -31,8 +37,9 @@ fn main() {
     match matches.subcommand() {
         Some((SUB_CMD_GENERATE, cmd)) => {
             let config_dir = cmd.get_one::<String>("CONFIG-DIR").unwrap();
+            let output_dir = cmd.get_one::<String>("OUTPUT-DIR").unwrap();
 
-            match generate(config_dir) {
+            match generate(config_dir, output_dir) {
                 Ok(..) => {
                     info!("Successfully generated and stored network config");
                 }

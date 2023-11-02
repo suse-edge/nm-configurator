@@ -22,7 +22,7 @@ pub struct Interface {
     mac_address: String,
 }
 
-pub(crate) fn generate(config_dir: &str) -> Result<(), anyhow::Error> {
+pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
     for entry in fs::read_dir(config_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -40,7 +40,7 @@ pub(crate) fn generate(config_dir: &str) -> Result<(), anyhow::Error> {
             .ok_or_else(|| anyhow!("Invalid file path"))?;
 
         let data = fs::read_to_string(&path).with_context(|| "Reading network config")?;
-        generate_config(hostname, &data)?;
+        generate_config(hostname, &data, output_dir)?;
     }
 
     Ok(())
@@ -49,13 +49,14 @@ pub(crate) fn generate(config_dir: &str) -> Result<(), anyhow::Error> {
 // Parse a YAML-based network configuration to the respective
 // network configuration files per interface (*.nmconnection)
 // and store those in the destination `hostname` directory.
-fn generate_config(hostname: &str, data: &str) -> Result<(), anyhow::Error> {
+fn generate_config(hostname: &str, data: &str, output_dir: &str) -> Result<(), anyhow::Error> {
     let network_state = NetworkState::new_from_yaml(data)?;
 
     let interfaces = extract_host_interfaces(hostname.to_string(), &network_state);
     let nm_config = network_state.gen_conf()?;
 
-    store_network_config(hostname, &interfaces, &nm_config).with_context(|| "Storing config")?;
+    store_network_config(output_dir, hostname, &interfaces, &nm_config)
+        .with_context(|| "Storing config")?;
 
     Ok(())
 }
@@ -79,16 +80,19 @@ fn extract_host_interfaces(hostname: String, network_state: &NetworkState) -> Ve
 }
 
 fn store_network_config(
+    output_dir: &str,
     hostname: &str,
     interfaces: &[HostInterfaces],
     nm_config: &HashMap<String, Vec<(String, String)>>,
 ) -> Result<(), anyhow::Error> {
-    fs::create_dir_all(hostname).with_context(|| "Creating output dir")?;
+    let path = Path::new(output_dir);
+
+    fs::create_dir_all(path.join(hostname)).with_context(|| "Creating output dir")?;
 
     let mapping_file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(HOST_MAPPING_FILE)?;
+        .open(path.join(HOST_MAPPING_FILE))?;
 
     serde_yaml::to_writer(mapping_file, interfaces)?;
 
@@ -97,7 +101,7 @@ fn store_network_config(
         .ok_or_else(|| anyhow!("Invalid NM configuration"))?
         .iter()
         .try_for_each(|(filename, content)| {
-            let path = Path::new(hostname).join(filename);
+            let path = path.join(hostname).join(filename);
 
             fs::write(path, content).with_context(|| "Writing config file")
         })?;
@@ -118,39 +122,40 @@ mod tests {
     fn generate_successfully() -> Result<(), anyhow::Error> {
         let config_dir = "testdata/generate";
         let exp_output_path = Path::new("testdata/generate/expected");
-        let output_path = Path::new("node1");
+        let out_dir = "_out";
+        let out_path = Path::new("_out").join("node1");
 
-        assert!(generate(config_dir).is_ok());
+        assert_eq!(generate(config_dir, out_dir).is_ok(), true);
 
         let exp_hosts: Vec<HostInterfaces> = serde_yaml::from_str(
             fs::read_to_string(exp_output_path.join(HOST_MAPPING_FILE))?.as_str(),
         )?;
-        let hosts: Vec<HostInterfaces> =
-            serde_yaml::from_str(fs::read_to_string(HOST_MAPPING_FILE)?.as_str())?;
+        let hosts: Vec<HostInterfaces> = serde_yaml::from_str(
+            fs::read_to_string(Path::new(out_dir).join(HOST_MAPPING_FILE))?.as_str(),
+        )?;
 
         assert_eq!(exp_hosts.len(), hosts.len());
 
         let exp_eth0_conn = fs::read_to_string(exp_output_path.join("eth0.nmconnection"))?;
         let exp_bridge_conn = fs::read_to_string(exp_output_path.join("bridge0.nmconnection"))?;
         let exp_lo_conn = fs::read_to_string(exp_output_path.join("lo.nmconnection"))?;
-        let eth0_conn = fs::read_to_string(output_path.join("eth0.nmconnection"))?;
-        let bridge_conn = fs::read_to_string(output_path.join("bridge0.nmconnection"))?;
-        let lo_conn = fs::read_to_string(output_path.join("lo.nmconnection"))?;
+        let eth0_conn = fs::read_to_string(out_path.join("eth0.nmconnection"))?;
+        let bridge_conn = fs::read_to_string(out_path.join("bridge0.nmconnection"))?;
+        let lo_conn = fs::read_to_string(out_path.join("lo.nmconnection"))?;
 
         assert_eq!(exp_eth0_conn, eth0_conn);
         assert_eq!(exp_bridge_conn, bridge_conn);
         assert_eq!(exp_lo_conn, lo_conn);
 
         // cleanup
-        fs::remove_file(HOST_MAPPING_FILE)?;
-        fs::remove_dir_all(output_path)?;
+        fs::remove_dir_all(out_dir)?;
 
         Ok(())
     }
 
     #[test]
     fn generate_fails_due_to_missing_path() {
-        let error = generate("<missing>").unwrap_err();
+        let error = generate("<missing>", "_out").unwrap_err();
         assert_eq!(
             error.to_string().contains("No such file or directory"),
             true
@@ -159,7 +164,7 @@ mod tests {
 
     #[test]
     fn generate_config_fails_due_to_invalid_data() {
-        let err = generate_config("host", "<invalid>").unwrap_err();
+        let err = generate_config("host", "<invalid>", "_out").unwrap_err();
         assert_eq!(
             err.to_string()
                 .contains("InvalidArgument: Invalid YAML string"),
