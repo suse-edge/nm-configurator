@@ -6,17 +6,17 @@ use std::path::Path;
 use anyhow::{anyhow, Context};
 use log::{info, warn};
 use nmstate::{InterfaceType, NetworkState};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct HostInterfaces {
     hostname: String,
     interfaces: Vec<Interface>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Interface {
     logical_name: String,
     mac_address: String,
@@ -83,7 +83,7 @@ fn store_network_config(
     interfaces: &[HostInterfaces],
     nm_config: &HashMap<String, Vec<(String, String)>>,
 ) -> Result<(), anyhow::Error> {
-    fs::create_dir(hostname).with_context(|| "Creating output dir")?;
+    fs::create_dir_all(hostname).with_context(|| "Creating output dir")?;
 
     let mapping_file = fs::OpenOptions::new()
         .create(true)
@@ -103,4 +103,111 @@ fn store_network_config(
         })?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use crate::generate_conf::{
+        extract_host_interfaces, generate, generate_config, HostInterfaces, HOST_MAPPING_FILE,
+    };
+
+    #[test]
+    fn generate_successfully() -> Result<(), anyhow::Error> {
+        let config_dir = "testdata/generate";
+        let exp_output_path = Path::new("testdata/generate/expected");
+        let output_path = Path::new("node1");
+
+        assert!(generate(config_dir).is_ok());
+
+        let exp_hosts: Vec<HostInterfaces> = serde_yaml::from_str(
+            fs::read_to_string(exp_output_path.join(HOST_MAPPING_FILE))?.as_str(),
+        )?;
+        let hosts: Vec<HostInterfaces> =
+            serde_yaml::from_str(fs::read_to_string(HOST_MAPPING_FILE)?.as_str())?;
+
+        assert_eq!(exp_hosts.len(), hosts.len());
+
+        let exp_eth0_conn = fs::read_to_string(exp_output_path.join("eth0.nmconnection"))?;
+        let exp_bridge_conn = fs::read_to_string(exp_output_path.join("bridge0.nmconnection"))?;
+        let exp_lo_conn = fs::read_to_string(exp_output_path.join("lo.nmconnection"))?;
+        let eth0_conn = fs::read_to_string(output_path.join("eth0.nmconnection"))?;
+        let bridge_conn = fs::read_to_string(output_path.join("bridge0.nmconnection"))?;
+        let lo_conn = fs::read_to_string(output_path.join("lo.nmconnection"))?;
+
+        assert_eq!(exp_eth0_conn, eth0_conn);
+        assert_eq!(exp_bridge_conn, bridge_conn);
+        assert_eq!(exp_lo_conn, lo_conn);
+
+        // cleanup
+        fs::remove_file(HOST_MAPPING_FILE)?;
+        fs::remove_dir_all(output_path)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn generate_fails_due_to_missing_path() {
+        let error = generate("<missing>").unwrap_err();
+        assert_eq!(
+            error.to_string().contains("No such file or directory"),
+            true
+        )
+    }
+
+    #[test]
+    fn generate_config_fails_due_to_invalid_data() {
+        let err = generate_config("host", "<invalid>").unwrap_err();
+        assert_eq!(
+            err.to_string()
+                .contains("InvalidArgument: Invalid YAML string"),
+            true
+        )
+    }
+
+    #[test]
+    fn extract_interfaces_skips_loopback() -> Result<(), serde_yaml::Error> {
+        let hostname = String::from("host1");
+        let net_state: nmstate::NetworkState = serde_yaml::from_str(
+            r#"---
+        interfaces:
+          - name: eth1
+            type: ethernet
+            mac-address: FE:C4:05:42:8B:AA
+          - name: bridge0
+            type: linux-bridge
+            mac-address: FE:C4:05:42:8B:AB
+          - name: lo
+            type: loopback
+            mac-address: 00:00:00:00:00:00            
+        "#,
+        )?;
+
+        let host_interfaces = extract_host_interfaces(hostname, &net_state);
+
+        assert_eq!(host_interfaces.len(), 1);
+
+        let host_interfaces = host_interfaces.get(0).unwrap();
+        assert_eq!(host_interfaces.hostname, "host1");
+        assert_eq!(host_interfaces.interfaces.len(), 2);
+
+        let i1 = host_interfaces.interfaces.get(0).unwrap();
+        let i2 = host_interfaces.interfaces.get(1).unwrap();
+
+        let names = ["eth1".to_string(), "bridge0".to_string()];
+        let addrs = [
+            "FE:C4:05:42:8B:AA".to_string(),
+            "FE:C4:05:42:8B:AB".to_string(),
+        ];
+
+        assert_eq!(names.contains(&i1.logical_name), true);
+        assert_eq!(names.contains(&i2.logical_name), true);
+
+        assert_eq!(addrs.contains(&i1.mac_address), true);
+        assert_eq!(addrs.contains(&i2.mac_address), true);
+
+        Ok(())
+    }
 }
