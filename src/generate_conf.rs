@@ -118,7 +118,7 @@ mod tests {
     use std::path::Path;
 
     use crate::generate_conf::{
-        extract_interfaces, generate, generate_config, HostInterfaces, HOST_MAPPING_FILE,
+        extract_interfaces, generate, generate_config, HostInterfaces, Interface, HOST_MAPPING_FILE,
     };
 
     #[test]
@@ -128,7 +128,7 @@ mod tests {
         let out_dir = "_out";
         let output_path = Path::new("_out").join("node1");
 
-        assert_eq!(generate(config_dir, out_dir).is_ok(), true);
+        assert!(generate(config_dir, out_dir).is_ok());
 
         // verify contents of *.nmconnection files
         let exp_eth0_conn = fs::read_to_string(exp_output_path.join("eth0.nmconnection"))?;
@@ -176,20 +176,13 @@ mod tests {
     #[test]
     fn generate_fails_due_to_missing_path() {
         let error = generate("<missing>", "_out").unwrap_err();
-        assert_eq!(
-            error.to_string().contains("No such file or directory"),
-            true
-        )
+        assert!(error.to_string().contains("No such file or directory"))
     }
 
     #[test]
     fn generate_config_fails_due_to_invalid_data() {
         let err = generate_config("<invalid>".to_string()).unwrap_err();
-        assert_eq!(
-            err.to_string()
-                .contains("InvalidArgument: Invalid YAML string"),
-            true
-        )
+        assert!(err.to_string().contains("Invalid YAML string"))
     }
 
     #[test]
@@ -210,17 +203,21 @@ mod tests {
         )?;
 
         let mut interfaces = extract_interfaces(&net_state);
-        assert_eq!(interfaces.len(), 2);
-
         interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
 
-        let i1 = interfaces.get(0).unwrap();
-        assert_eq!(i1.logical_name, "bridge0");
-        assert_eq!(i1.mac_address, "FE:C4:05:42:8B:AB");
-
-        let i2 = interfaces.get(1).unwrap();
-        assert_eq!(i2.logical_name, "eth1");
-        assert_eq!(i2.mac_address, "FE:C4:05:42:8B:AA");
+        assert_eq!(
+            interfaces,
+            vec![
+                Interface {
+                    logical_name: "bridge0".to_string(),
+                    mac_address: "FE:C4:05:42:8B:AB".to_string()
+                },
+                Interface {
+                    logical_name: "eth1".to_string(),
+                    mac_address: "FE:C4:05:42:8B:AA".to_string()
+                }
+            ]
+        );
 
         Ok(())
     }
