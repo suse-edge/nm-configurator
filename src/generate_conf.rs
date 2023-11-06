@@ -9,13 +9,15 @@ use serde::{Deserialize, Serialize};
 
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct HostInterfaces {
     hostname: String,
     interfaces: Vec<Interface>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct Interface {
     logical_name: String,
     mac_address: String,
@@ -125,29 +127,46 @@ mod tests {
         let config_dir = "testdata/generate";
         let exp_output_path = Path::new("testdata/generate/expected");
         let out_dir = "_out";
-        let out_path = Path::new("_out").join("node1");
+        let output_path = Path::new("_out").join("node1");
 
         assert_eq!(generate(config_dir, out_dir).is_ok(), true);
 
-        let exp_hosts: Vec<HostInterfaces> = serde_yaml::from_str(
-            fs::read_to_string(exp_output_path.join(HOST_MAPPING_FILE))?.as_str(),
-        )?;
-        let hosts: Vec<HostInterfaces> = serde_yaml::from_str(
-            fs::read_to_string(Path::new(out_dir).join(HOST_MAPPING_FILE))?.as_str(),
-        )?;
-
-        assert_eq!(exp_hosts.len(), hosts.len());
-
+        // verify contents of *.nmconnection files
         let exp_eth0_conn = fs::read_to_string(exp_output_path.join("eth0.nmconnection"))?;
         let exp_bridge_conn = fs::read_to_string(exp_output_path.join("bridge0.nmconnection"))?;
         let exp_lo_conn = fs::read_to_string(exp_output_path.join("lo.nmconnection"))?;
-        let eth0_conn = fs::read_to_string(out_path.join("eth0.nmconnection"))?;
-        let bridge_conn = fs::read_to_string(out_path.join("bridge0.nmconnection"))?;
-        let lo_conn = fs::read_to_string(out_path.join("lo.nmconnection"))?;
+        let eth0_conn = fs::read_to_string(output_path.join("eth0.nmconnection"))?;
+        let bridge_conn = fs::read_to_string(output_path.join("bridge0.nmconnection"))?;
+        let lo_conn = fs::read_to_string(output_path.join("lo.nmconnection"))?;
 
         assert_eq!(exp_eth0_conn, eth0_conn);
         assert_eq!(exp_bridge_conn, bridge_conn);
         assert_eq!(exp_lo_conn, lo_conn);
+
+        // verify contents of the host mapping file
+        let mut exp_host_interfaces: Vec<HostInterfaces> = serde_yaml::from_str(
+            fs::read_to_string(exp_output_path.join(HOST_MAPPING_FILE))?.as_str(),
+        )?;
+        let mut host_interfaces: Vec<HostInterfaces> = serde_yaml::from_str(
+            fs::read_to_string(Path::new(out_dir).join(HOST_MAPPING_FILE))?.as_str(),
+        )?;
+
+        assert_eq!(exp_host_interfaces.len(), host_interfaces.len());
+
+        exp_host_interfaces.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+        host_interfaces.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+
+        for (x, y) in exp_host_interfaces
+            .iter_mut()
+            .zip(host_interfaces.iter_mut())
+        {
+            x.interfaces
+                .sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
+            y.interfaces
+                .sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
+        }
+
+        assert_eq!(exp_host_interfaces, host_interfaces);
 
         // cleanup
         fs::remove_dir_all(out_dir)?;
