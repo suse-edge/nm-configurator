@@ -47,12 +47,11 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
             .ok_or_else(|| anyhow!("Invalid file path"))?
             .to_string();
 
-        let data = fs::read_to_string(&path).with_context(|| "Reading network config")?;
+        let data = fs::read_to_string(&path).context("Reading network config")?;
 
         let (interfaces, config) = generate_config(data)?;
 
-        store_network_config(output_dir, hostname, interfaces, config)
-            .with_context(|| "Storing config")?;
+        store_network_config(output_dir, hostname, interfaces, config).context("Storing config")?;
     }
 
     Ok(())
@@ -92,12 +91,12 @@ fn store_network_config(
 ) -> Result<(), anyhow::Error> {
     let path = Path::new(output_dir);
 
-    fs::create_dir_all(path.join(&hostname)).with_context(|| "Creating output dir")?;
+    fs::create_dir_all(path.join(&hostname)).context("Creating output dir")?;
 
     config.iter().try_for_each(|(filename, content)| {
         let path = path.join(&hostname).join(filename);
 
-        fs::write(path, content).with_context(|| "Writing config file")
+        fs::write(path, content).context("Writing config file")
     })?;
 
     let mapping_file = fs::OpenOptions::new()
@@ -110,7 +109,7 @@ fn store_network_config(
         interfaces,
     }];
 
-    serde_yaml::to_writer(mapping_file, &host_interfaces).with_context(|| "Writing mapping file")
+    serde_yaml::to_writer(mapping_file, &host_interfaces).context("Writing mapping file")
 }
 
 #[cfg(test)]
