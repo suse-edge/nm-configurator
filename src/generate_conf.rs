@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
@@ -10,18 +9,24 @@ use serde::{Deserialize, Serialize};
 
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct HostInterfaces {
     hostname: String,
     interfaces: Vec<Interface>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Interface {
     logical_name: String,
     mac_address: String,
 }
 
+/// NetworkConfig contains the generated configurations in the
+/// following format: Vec<(config_file_name, config_content>)
+type NetworkConfig = Vec<(String, String)>;
+
+/// Generate network configurations from all YAML files in the `config_dir`
+/// and store the result *.nmconnection files and host mapping under `output_dir`.
 pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
     for entry in fs::read_dir(config_dir)? {
         let entry = entry?;
@@ -37,32 +42,35 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
         let hostname = path
             .file_stem()
             .and_then(OsStr::to_str)
-            .ok_or_else(|| anyhow!("Invalid file path"))?;
+            .ok_or_else(|| anyhow!("Invalid file path"))?
+            .to_string();
 
         let data = fs::read_to_string(&path).with_context(|| "Reading network config")?;
-        generate_config(hostname, &data, output_dir)?;
+
+        let (interfaces, config) = generate_config(data)?;
+
+        store_network_config(output_dir, hostname, interfaces, config)
+            .with_context(|| "Storing config")?;
     }
 
     Ok(())
 }
 
-// Parse a YAML-based network configuration to the respective
-// network configuration files per interface (*.nmconnection)
-// and store those in the destination `hostname` directory.
-fn generate_config(hostname: &str, data: &str, output_dir: &str) -> Result<(), anyhow::Error> {
-    let network_state = NetworkState::new_from_yaml(data)?;
+fn generate_config(data: String) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
+    let network_state = NetworkState::new_from_yaml(&data)?;
 
-    let interfaces = extract_host_interfaces(hostname.to_string(), &network_state);
-    let nm_config = network_state.gen_conf()?;
+    let interfaces = extract_interfaces(&network_state);
+    let config = network_state
+        .gen_conf()?
+        .get("NetworkManager")
+        .ok_or_else(|| anyhow!("Invalid NM configuration"))?
+        .to_owned();
 
-    store_network_config(output_dir, hostname, &interfaces, &nm_config)
-        .with_context(|| "Storing config")?;
-
-    Ok(())
+    Ok((interfaces, config))
 }
 
-fn extract_host_interfaces(hostname: String, network_state: &NetworkState) -> Vec<HostInterfaces> {
-    let interfaces = network_state
+fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
+    network_state
         .interfaces
         .iter()
         .filter(|i| i.iface_type() != InterfaceType::Loopback)
@@ -71,42 +79,36 @@ fn extract_host_interfaces(hostname: String, network_state: &NetworkState) -> Ve
             logical_name: i.name().to_string(),
             mac_address: i.base_iface().mac_address.clone().unwrap(),
         })
-        .collect();
-
-    vec![HostInterfaces {
-        hostname,
-        interfaces,
-    }]
+        .collect()
 }
 
 fn store_network_config(
     output_dir: &str,
-    hostname: &str,
-    interfaces: &[HostInterfaces],
-    nm_config: &HashMap<String, Vec<(String, String)>>,
+    hostname: String,
+    interfaces: Vec<Interface>,
+    config: NetworkConfig,
 ) -> Result<(), anyhow::Error> {
     let path = Path::new(output_dir);
 
-    fs::create_dir_all(path.join(hostname)).with_context(|| "Creating output dir")?;
+    fs::create_dir_all(path.join(&hostname)).with_context(|| "Creating output dir")?;
+
+    config.iter().try_for_each(|(filename, content)| {
+        let path = path.join(&hostname).join(filename);
+
+        fs::write(path, content).with_context(|| "Writing config file")
+    })?;
 
     let mapping_file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path.join(HOST_MAPPING_FILE))?;
 
-    serde_yaml::to_writer(mapping_file, interfaces)?;
+    let host_interfaces = [HostInterfaces {
+        hostname,
+        interfaces,
+    }];
 
-    nm_config
-        .get("NetworkManager")
-        .ok_or_else(|| anyhow!("Invalid NM configuration"))?
-        .iter()
-        .try_for_each(|(filename, content)| {
-            let path = path.join(hostname).join(filename);
-
-            fs::write(path, content).with_context(|| "Writing config file")
-        })?;
-
-    Ok(())
+    serde_yaml::to_writer(mapping_file, &host_interfaces).with_context(|| "Writing mapping file")
 }
 
 #[cfg(test)]
@@ -115,7 +117,7 @@ mod tests {
     use std::path::Path;
 
     use crate::generate_conf::{
-        extract_host_interfaces, generate, generate_config, HostInterfaces, HOST_MAPPING_FILE,
+        extract_interfaces, generate, generate_config, HostInterfaces, HOST_MAPPING_FILE,
     };
 
     #[test]
@@ -164,7 +166,7 @@ mod tests {
 
     #[test]
     fn generate_config_fails_due_to_invalid_data() {
-        let err = generate_config("host", "<invalid>", "_out").unwrap_err();
+        let err = generate_config("<invalid>".to_string()).unwrap_err();
         assert_eq!(
             err.to_string()
                 .contains("InvalidArgument: Invalid YAML string"),
@@ -174,7 +176,6 @@ mod tests {
 
     #[test]
     fn extract_interfaces_skips_loopback() -> Result<(), serde_yaml::Error> {
-        let hostname = String::from("host1");
         let net_state: nmstate::NetworkState = serde_yaml::from_str(
             r#"---
         interfaces:
@@ -190,28 +191,18 @@ mod tests {
         "#,
         )?;
 
-        let host_interfaces = extract_host_interfaces(hostname, &net_state);
+        let mut interfaces = extract_interfaces(&net_state);
+        assert_eq!(interfaces.len(), 2);
 
-        assert_eq!(host_interfaces.len(), 1);
+        interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
 
-        let host_interfaces = host_interfaces.get(0).unwrap();
-        assert_eq!(host_interfaces.hostname, "host1");
-        assert_eq!(host_interfaces.interfaces.len(), 2);
+        let i1 = interfaces.get(0).unwrap();
+        assert_eq!(i1.logical_name, "bridge0");
+        assert_eq!(i1.mac_address, "FE:C4:05:42:8B:AB");
 
-        let i1 = host_interfaces.interfaces.get(0).unwrap();
-        let i2 = host_interfaces.interfaces.get(1).unwrap();
-
-        let names = ["eth1".to_string(), "bridge0".to_string()];
-        let addrs = [
-            "FE:C4:05:42:8B:AA".to_string(),
-            "FE:C4:05:42:8B:AB".to_string(),
-        ];
-
-        assert_eq!(names.contains(&i1.logical_name), true);
-        assert_eq!(names.contains(&i2.logical_name), true);
-
-        assert_eq!(addrs.contains(&i1.mac_address), true);
-        assert_eq!(addrs.contains(&i2.mac_address), true);
+        let i2 = interfaces.get(1).unwrap();
+        assert_eq!(i2.logical_name, "eth1");
+        assert_eq!(i2.mac_address, "FE:C4:05:42:8B:AA");
 
         Ok(())
     }

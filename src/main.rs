@@ -36,8 +36,12 @@ fn main() {
 
     match matches.subcommand() {
         Some((SUB_CMD_GENERATE, cmd)) => {
-            let config_dir = cmd.get_one::<String>("CONFIG-DIR").unwrap();
-            let output_dir = cmd.get_one::<String>("OUTPUT-DIR").unwrap();
+            let config_dir = cmd
+                .get_one::<String>("CONFIG-DIR")
+                .expect("--config-dir is required");
+            let output_dir = cmd
+                .get_one::<String>("OUTPUT-DIR")
+                .expect("--output-dir is required");
 
             match generate(config_dir, output_dir) {
                 Ok(..) => {
