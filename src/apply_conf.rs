@@ -90,29 +90,38 @@ fn copy_connection_files(
 
         let mut contents = fs::read_to_string(&path).context("Reading file")?;
 
-        let stem = path
+        let mut filename = path
             .file_stem()
             .and_then(OsStr::to_str)
             .ok_or_else(|| anyhow!("Invalid file path"))?;
 
         // Update the name and all references of the host NIC in the settings file if there is a difference from the static config.
-        let destination = host.interfaces.iter()
-            .find(|interface| interface.logical_name == stem)
+        if let Some((interface, nic_name)) = host
+            .interfaces
+            .iter()
+            .find(|interface| interface.logical_name == filename)
             .and_then(|interface| {
-                network_interfaces.iter().
-                    find(|nic| {
-                        nic.mac_addr.clone().is_some_and(|addr| addr == interface.mac_address)
+                network_interfaces
+                    .iter()
+                    .find(|nic| {
+                        nic.mac_addr
+                            .clone()
+                            .is_some_and(|addr| addr == interface.mac_address)
                             && nic.name != interface.logical_name
-                    }).
-                    map(|nic| {
-                        info!("Using name '{}' for interface with MAC address '{}' instead of the preconfigured '{}'",
-                                 nic.name, interface.mac_address, interface.logical_name);
-
-                        contents = contents.replace(&interface.logical_name, &nic.name);
-                        return Path::new(destination_dir).join(&nic.name).with_extension(CONNECTION_FILE_EXT);
                     })
+                    .map(|nic| (interface, &nic.name))
             })
-            .unwrap_or_else(|| Path::new(destination_dir).join(stem).with_extension(CONNECTION_FILE_EXT));
+        {
+            info!("Using name '{}' for interface with MAC address '{}' instead of the preconfigured '{}'",
+                nic_name, interface.mac_address, interface.logical_name);
+
+            contents = contents.replace(&interface.logical_name, nic_name);
+            filename = nic_name;
+        }
+
+        let destination = Path::new(destination_dir)
+            .join(filename)
+            .with_extension(CONNECTION_FILE_EXT);
 
         let mut file = OpenOptions::new()
             .create(true)
