@@ -1,6 +1,5 @@
 use std::ffi::OsStr;
 use std::fs;
-use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -123,14 +122,14 @@ fn copy_connection_files(
             .join(filename)
             .with_extension(CONNECTION_FILE_EXT);
 
-        let mut file = OpenOptions::new()
+        fs::OpenOptions::new()
             .create(true)
             .write(true)
             .mode(0o600)
-            .open(&destination)?;
-
-        file.write_all(contents.as_bytes())
-            .with_context(|| format!("Writing file {:?}", &destination))?;
+            .open(&destination)
+            .context("Creating file")?
+            .write_all(contents.as_bytes())
+            .context("Writing file")?;
     }
 
     Ok(())
