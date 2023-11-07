@@ -5,26 +5,14 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use crate::HOST_MAPPING_FILE;
 use anyhow::{anyhow, Context};
 use log::{debug, info, warn};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
-use serde::Deserialize;
+
+use crate::types::Host;
+use crate::HOST_MAPPING_FILE;
 
 const CONNECTION_FILE_EXT: &str = "nmconnection";
-
-#[derive(Deserialize, Debug)]
-struct Host {
-    #[serde(rename = "hostname")]
-    name: String,
-    interfaces: Vec<Interface>,
-}
-
-#[derive(Deserialize, Debug)]
-struct Interface {
-    logical_name: String,
-    mac_address: String,
-}
 
 pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyhow::Error> {
     let hosts = parse_config(source_dir, HOST_MAPPING_FILE).context("Parsing config")?;
@@ -81,7 +69,7 @@ fn copy_connection_files(
 ) -> Result<(), anyhow::Error> {
     fs::create_dir_all(destination_dir).context("Creating destination dir")?;
 
-    let host_config_dir = Path::new(source_dir).join(&host.name);
+    let host_config_dir = Path::new(source_dir).join(&host.hostname);
 
     for entry in fs::read_dir(host_config_dir)? {
         let entry = entry?;

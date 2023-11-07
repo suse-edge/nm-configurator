@@ -5,6 +5,7 @@ use generate_conf::generate;
 
 mod apply_conf;
 mod generate_conf;
+mod types;
 
 const APP_NAME: &str = "nmc";
 

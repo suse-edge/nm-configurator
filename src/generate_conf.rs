@@ -2,25 +2,12 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
-use crate::HOST_MAPPING_FILE;
 use anyhow::{anyhow, Context};
 use log::{info, warn};
 use nmstate::{InterfaceType, NetworkState};
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct HostInterfaces {
-    hostname: String,
-    interfaces: Vec<Interface>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct Interface {
-    logical_name: String,
-    mac_address: String,
-}
+use crate::types::{Host, Interface};
+use crate::HOST_MAPPING_FILE;
 
 /// NetworkConfig contains the generated configurations in the
 /// following format: Vec<(config_file_name, config_content>)
@@ -103,12 +90,12 @@ fn store_network_config(
         .append(true)
         .open(path.join(HOST_MAPPING_FILE))?;
 
-    let host_interfaces = [HostInterfaces {
+    let hosts = [Host {
         hostname,
         interfaces,
     }];
 
-    serde_yaml::to_writer(mapping_file, &host_interfaces).context("Writing mapping file")
+    serde_yaml::to_writer(mapping_file, &hosts).context("Writing mapping file")
 }
 
 #[cfg(test)]
@@ -116,9 +103,9 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::generate_conf::{
-        extract_interfaces, generate, generate_config, HostInterfaces, Interface, HOST_MAPPING_FILE,
-    };
+    use crate::generate_conf::{extract_interfaces, generate, generate_config};
+    use crate::types::{Host, Interface};
+    use crate::HOST_MAPPING_FILE;
 
     #[test]
     fn generate_successfully() -> Result<(), anyhow::Error> {
@@ -142,29 +129,26 @@ mod tests {
         assert_eq!(exp_lo_conn, lo_conn);
 
         // verify contents of the host mapping file
-        let mut exp_host_interfaces: Vec<HostInterfaces> = serde_yaml::from_str(
+        let mut exp_hosts: Vec<Host> = serde_yaml::from_str(
             fs::read_to_string(exp_output_path.join(HOST_MAPPING_FILE))?.as_str(),
         )?;
-        let mut host_interfaces: Vec<HostInterfaces> = serde_yaml::from_str(
+        let mut hosts: Vec<Host> = serde_yaml::from_str(
             fs::read_to_string(Path::new(out_dir).join(HOST_MAPPING_FILE))?.as_str(),
         )?;
 
-        assert_eq!(exp_host_interfaces.len(), host_interfaces.len());
+        assert_eq!(exp_hosts.len(), hosts.len());
 
-        exp_host_interfaces.sort_by(|a, b| a.hostname.cmp(&b.hostname));
-        host_interfaces.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+        exp_hosts.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+        hosts.sort_by(|a, b| a.hostname.cmp(&b.hostname));
 
-        for (x, y) in exp_host_interfaces
-            .iter_mut()
-            .zip(host_interfaces.iter_mut())
-        {
-            x.interfaces
+        for (h1, h2) in exp_hosts.iter_mut().zip(hosts.iter_mut()) {
+            h1.interfaces
                 .sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
-            y.interfaces
+            h2.interfaces
                 .sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
         }
 
-        assert_eq!(exp_host_interfaces, host_interfaces);
+        assert_eq!(exp_hosts, hosts);
 
         // cleanup
         fs::remove_dir_all(out_dir)?;
@@ -209,12 +193,12 @@ mod tests {
             vec![
                 Interface {
                     logical_name: "bridge0".to_string(),
-                    mac_address: "FE:C4:05:42:8B:AB".to_string()
+                    mac_address: "FE:C4:05:42:8B:AB".to_string(),
                 },
                 Interface {
                     logical_name: "eth1".to_string(),
-                    mac_address: "FE:C4:05:42:8B:AA".to_string()
-                }
+                    mac_address: "FE:C4:05:42:8B:AA".to_string(),
+                },
             ]
         );
 
