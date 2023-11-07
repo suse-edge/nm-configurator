@@ -2,12 +2,11 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
+use crate::HOST_MAPPING_FILE;
 use anyhow::{anyhow, Context};
 use log::{info, warn};
 use nmstate::{InterfaceType, NetworkState};
 use serde::{Deserialize, Serialize};
-
-const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
 #[derive(Serialize, Deserialize)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
