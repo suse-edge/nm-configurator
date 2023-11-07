@@ -1,0 +1,63 @@
+dns-resolver: {}
+routes:
+  running:
+    - destination: 0.0.0.0/0
+      next-hop-interface: eth0
+      next-hop-address: 192.168.75.1
+      table-id: 254
+  config: []
+interfaces:
+  - name: bridge0
+    type: linux-bridge
+    state: up
+    mac-address: FE:C4:05:42:8B:AA
+    ipv4:
+      enabled: true
+      address:
+        - ip: 10.88.0.1
+          prefix-length: 16
+    ipv6:
+      enabled: true
+      address:
+        - ip: fe80::fcc4:5ff:fe42:8baa
+          prefix-length: 64
+  - name: eth0
+    type: ethernet
+    state: up
+    mac-address: 0E:4D:C6:B8:C4:72
+    ipv4:
+      enabled: true
+      address:
+        - ip: 192.168.75.4
+          prefix-length: 24
+    ipv6:
+      enabled: true
+      autoconf: false
+      address:
+        - ip: fdbb:5774:7b3e:da29:a589:1601:cb3:bc2e
+          prefix-length: 64
+          valid-left: 561235sec
+          preferred-left: 42676sec
+        - ip: fdbb:5774:7b3e:da29:c4d:c6ff:feb8:c472
+          prefix-length: 64
+          valid-left: 2591924sec
+          preferred-left: 604724sec
+        - ip: fe80::c4d:c6ff:feb8:c472
+          prefix-length: 64
+    ethernet:
+      auto-negotiation: false
+  - name: lo
+    type: loopback
+    state: up
+    mac-address: 00:00:00:00:00:00
+    mtu: 65536
+    ipv4:
+      enabled: true
+      address:
+        - ip: 127.0.0.1
+          prefix-length: 8
+    ipv6:
+      enabled: true
+      address:
+        - ip: ::1
+          prefix-length: 128

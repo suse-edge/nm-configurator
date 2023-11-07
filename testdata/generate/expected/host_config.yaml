@@ -1,0 +1,6 @@
+- hostname: node1
+  interfaces:
+    - logical_name: bridge0
+      mac_address: FE:C4:05:42:8B:AA
+    - logical_name: eth0
+      mac_address: 0E:4D:C6:B8:C4:72

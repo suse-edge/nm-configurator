@@ -1,0 +1,16 @@
+[connection]
+autoconnect=true
+autoconnect-slaves=-1
+id=lo
+interface-name=lo
+type=loopback
+uuid=e40b7973-b220-5450-bc07-1d87edc4aff2
+
+[ipv4]
+address0=127.0.0.1/8
+method=manual
+
+[ipv6]
+addr-gen-mode=0
+address0=::1/128
+method=manual
