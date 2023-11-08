@@ -14,7 +14,7 @@ use crate::HOST_MAPPING_FILE;
 const CONNECTION_FILE_EXT: &str = "nmconnection";
 
 pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyhow::Error> {
-    let hosts = parse_config(source_dir, HOST_MAPPING_FILE).context("Parsing config")?;
+    let hosts = parse_config(source_dir).context("Parsing config")?;
     debug!("Loaded hosts config: {hosts:?}");
 
     let network_interfaces = NetworkInterface::show()?;
@@ -27,8 +27,8 @@ pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyho
     copy_connection_files(host, &network_interfaces, source_dir, destination_dir)
 }
 
-fn parse_config(source_dir: &str, config_file_name: &str) -> Result<Vec<Host>, anyhow::Error> {
-    let config_file = Path::new(source_dir).join(config_file_name);
+fn parse_config(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
+    let config_file = Path::new(source_dir).join(HOST_MAPPING_FILE);
 
     let file = fs::File::open(config_file)?;
     let mut hosts: Vec<Host> = serde_yaml::from_reader(file)?;
@@ -57,7 +57,7 @@ fn identify_host(hosts: Vec<Host>, network_interfaces: &[NetworkInterface]) -> O
 }
 
 /// Copy all *.nmconnection files from the preconfigured host dir to the
-/// appropriate NetworkManager dir (default "/etc/NetworkManager/system-connections").
+/// appropriate NetworkManager dir (default `/etc/NetworkManager/system-connections`).
 fn copy_connection_files(
     host: Host,
     network_interfaces: &[NetworkInterface],
@@ -142,7 +142,6 @@ mod tests {
 
     use crate::apply_conf::{copy_connection_files, identify_host, parse_config};
     use crate::types::{Host, Interface};
-    use crate::HOST_MAPPING_FILE;
 
     #[test]
     fn identify_host_successfully() {
@@ -218,7 +217,7 @@ mod tests {
 
     #[test]
     fn parse_config_fails_due_to_missing_file() {
-        let error = parse_config("<missing-dir>", HOST_MAPPING_FILE).unwrap_err();
+        let error = parse_config("<missing>").unwrap_err();
         assert!(error.to_string().contains("No such file or directory"))
     }
 

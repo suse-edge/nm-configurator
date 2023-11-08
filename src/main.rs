@@ -15,7 +15,7 @@ const SUB_CMD_APPLY: &str = "apply";
 /// Destination directory to store the *.nmconnection files for NetworkManager.
 const SYSTEM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
 
-/// File storing a map name between host identifier (usually hostname) and its preconfigured network interfaces.
+/// File storing a mapping between host identifier (usually hostname) and its preconfigured network interfaces.
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
 fn main() {
