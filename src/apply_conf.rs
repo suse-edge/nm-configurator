@@ -132,3 +132,167 @@ fn copy_connection_files(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::{fs, io};
+
+    use network_interface::NetworkInterface;
+
+    use crate::apply_conf::{copy_connection_files, identify_host, parse_config};
+    use crate::types::{Host, Interface};
+    use crate::HOST_MAPPING_FILE;
+
+    #[test]
+    fn identify_host_successfully() {
+        let hosts = vec![
+            Host {
+                hostname: "h1".to_string(),
+                interfaces: vec![Interface {
+                    logical_name: "eth0".to_string(),
+                    mac_address: "00:11:22:33:44:55".to_string(),
+                }],
+            },
+            Host {
+                hostname: "h2".to_string(),
+                interfaces: vec![Interface {
+                    logical_name: "".to_string(),
+                    mac_address: "10:10:10:10:10:10".to_string(),
+                }],
+            },
+        ];
+        let interfaces = [
+            NetworkInterface {
+                name: "eth0".to_string(),
+                mac_addr: Some("00:11:22:33:44:55".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+            NetworkInterface {
+                name: "eth0".to_string(),
+                mac_addr: Some("00:10:20:30:40:50".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+        ];
+
+        let host = identify_host(hosts, &interfaces).unwrap();
+        assert_eq!(host.hostname, "h1");
+        assert_eq!(
+            host.interfaces,
+            vec![Interface {
+                logical_name: "eth0".to_string(),
+                mac_address: "00:11:22:33:44:55".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn identify_host_fails() {
+        let hosts = vec![
+            Host {
+                hostname: "h1".to_string(),
+                interfaces: vec![Interface {
+                    logical_name: "eth0".to_string(),
+                    mac_address: "10:20:30:40:50:60".to_string(),
+                }],
+            },
+            Host {
+                hostname: "h2".to_string(),
+                interfaces: vec![Interface {
+                    logical_name: "".to_string(),
+                    mac_address: "00:10:20:30:40:50".to_string(),
+                }],
+            },
+        ];
+        let interfaces = [NetworkInterface {
+            name: "eth0".to_string(),
+            mac_addr: Some("00:11:22:33:44:55".to_string()),
+            addr: vec![],
+            index: 0,
+        }];
+
+        assert!(identify_host(hosts, &interfaces).is_none())
+    }
+
+    #[test]
+    fn parse_config_fails_due_to_missing_file() {
+        let error = parse_config("<missing-dir>", HOST_MAPPING_FILE).unwrap_err();
+        assert!(error.to_string().contains("No such file or directory"))
+    }
+
+    #[test]
+    fn copy_connection_files_successfully() -> io::Result<()> {
+        let source_dir = "testdata/apply";
+        let destination_dir = "_out";
+        let host = Host {
+            hostname: "node1".to_string(),
+            interfaces: vec![
+                Interface {
+                    logical_name: "eth0".to_string(),
+                    mac_address: "00:11:22:33:44:55".to_string(),
+                },
+                Interface {
+                    logical_name: "eth2".to_string(),
+                    mac_address: "00:11:22:33:44:56".to_string(),
+                },
+                Interface {
+                    logical_name: "eth1".to_string(),
+                    mac_address: "00:11:22:33:44:57".to_string(),
+                },
+                Interface {
+                    logical_name: "bond0".to_string(),
+                    mac_address: "00:11:22:33:44:58".to_string(),
+                },
+            ],
+        };
+        let interfaces = [
+            NetworkInterface {
+                name: "eth0".to_string(),
+                mac_addr: Some("00:11:22:33:44:55".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+            NetworkInterface {
+                name: "eth4".to_string(),
+                mac_addr: Some("00:11:22:33:44:56".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+            NetworkInterface {
+                name: "eth1".to_string(),
+                mac_addr: Some("00:11:22:33:44:57".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+            // NetworkInterface {
+            //     name: "bond0", Excluded on purpose, "bond0.nmconnection" should still be copied
+            // },
+        ];
+
+        assert!(copy_connection_files(host, &interfaces, source_dir, destination_dir).is_ok());
+
+        let source_path = Path::new(source_dir).join("node1");
+        let destination_path = Path::new(destination_dir);
+        for entry in fs::read_dir(&source_path)? {
+            let entry = entry?;
+
+            let mut filename = entry.file_name().into_string().unwrap();
+            let mut input = fs::read_to_string(entry.path())?;
+
+            // Adjust the name and content for the "eth2"->"eth4" edge case.
+            if entry.path().file_stem().is_some_and(|stem| stem == "eth2") {
+                filename = filename.replace("eth2", "eth4");
+                input = input.replace("eth2", "eth4");
+            }
+
+            let output = fs::read_to_string(destination_path.join(&filename))?;
+
+            assert_eq!(input, output);
+        }
+
+        // cleanup
+        fs::remove_dir_all(destination_dir)
+    }
+}
