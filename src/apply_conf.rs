@@ -15,18 +15,16 @@ const CONNECTION_FILE_EXT: &str = "nmconnection";
 
 pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyhow::Error> {
     let hosts = parse_config(source_dir, HOST_MAPPING_FILE).context("Parsing config")?;
-    info!("Loaded hosts config: {hosts:?}");
+    debug!("Loaded hosts config: {hosts:?}");
 
     let network_interfaces = NetworkInterface::show()?;
     debug!("Retrieved network interfaces: {network_interfaces:?}");
 
     let host = identify_host(hosts, &network_interfaces)
         .ok_or_else(|| anyhow!("None of the preconfigured hosts match local NICs"))?;
-    info!("Identified host: {host:?}");
+    info!("Identified host: {}", host.hostname);
 
-    copy_connection_files(host, &network_interfaces, source_dir, destination_dir)?;
-
-    Ok(())
+    copy_connection_files(host, &network_interfaces, source_dir, destination_dir)
 }
 
 fn parse_config(source_dir: &str, config_file_name: &str) -> Result<Vec<Host>, anyhow::Error> {
