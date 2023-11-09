@@ -1,0 +1,14 @@
+- hostname: node1
+  interfaces:
+    - logical_name: eth0
+      mac_address: 00:11:22:33:44:55
+    - logical_name: eth1
+      mac_address: 00:11:22:33:44:58
+    - logical_name: eth2
+      mac_address: 36:5e:6b:a2:ed:80
+    - logical_name: bond0
+      mac_address: 00:11:22:AA:44:58
+- hostname: node2
+  interfaces:
+    - logical_name: eth0
+      mac_address: 36:5E:6B:A2:ED:81
