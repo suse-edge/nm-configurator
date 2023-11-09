@@ -1,6 +1,0 @@
--[connection]
-id=eth0
-uuid=d4c69e0e-f9fc-441a-b586-3cfdfffdd70a
-type=ethernet
-interface-name=eth0
-
