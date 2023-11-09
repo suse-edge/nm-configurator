@@ -47,7 +47,7 @@ fn main() {
                     clap::Arg::new("CONFIG-DIR")
                         .long("config-dir")
                         .default_value("config")
-                        .help("Config dir containing host mapping ('host_config.yaml')\
+                        .help("Config dir containing host mapping ('host_config.yaml') \
                          and subdirectories containing *.nmconnection files per host")
                 )
         );
