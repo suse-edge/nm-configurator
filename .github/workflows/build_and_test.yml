@@ -13,7 +13,7 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Lint
-        run: cargo clippy --all
+        run: cargo clippy --all-targets --all-features -- -D warnings
   build:
     runs-on: ubuntu-latest
     needs: [ lint ]
