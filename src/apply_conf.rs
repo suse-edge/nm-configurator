@@ -222,6 +222,44 @@ mod tests {
     }
 
     #[test]
+    fn parse_config_successfully() {
+        let hosts = parse_config("testdata/apply/config").unwrap();
+        assert_eq!(
+            hosts,
+            vec![
+                Host {
+                    hostname: "node1".to_string(),
+                    interfaces: vec![
+                        Interface {
+                            logical_name: "eth0".to_string(),
+                            mac_address: "00:11:22:33:44:55".to_string(),
+                        },
+                        Interface {
+                            logical_name: "eth1".to_string(),
+                            mac_address: "00:11:22:33:44:58".to_string(),
+                        },
+                        Interface {
+                            logical_name: "eth2".to_string(),
+                            mac_address: "36:5e:6b:a2:ed:80".to_string(),
+                        },
+                        Interface {
+                            logical_name: "bond0".to_string(),
+                            mac_address: "00:11:22:aa:44:58".to_string(),
+                        },
+                    ],
+                },
+                Host {
+                    hostname: "node2".to_string(),
+                    interfaces: vec![Interface {
+                        logical_name: "eth0".to_string(),
+                        mac_address: "36:5e:6b:a2:ed:81".to_string(),
+                    }],
+                },
+            ]
+        )
+    }
+
+    #[test]
     fn copy_connection_files_successfully() -> io::Result<()> {
         let source_dir = "testdata/apply";
         let destination_dir = "_out";
