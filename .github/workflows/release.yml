@@ -24,15 +24,15 @@ jobs:
         run: |
           docker build -t nmc:amd64 --platform linux/amd64 .
           container_id=$(docker create nmc:amd64 --entrypoint /)
-          docker cp $container_id:/target/release/nmc nmc-x86_64
+          docker cp $container_id:/target/release/nmc nmc-linux-x86_64
       - name: Build aarch64 binary
         run: |
           docker build -t nmc:arm64 --platform linux/arm64 .
           container_id=$(docker create nmc:arm64 --entrypoint /)
-          docker cp $container_id:/target/release/nmc nmc-aarch64
+          docker cp $container_id:/target/release/nmc nmc-linux-aarch64
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            nmc-aarch64
-            nmc-x86_64
+            nmc-linux-aarch64
+            nmc-linux-x86_64
