@@ -1,33 +1,24 @@
 # nm-configurator
 
-nm-configurator (or NMC) is a CLI which makes it easy to generate and apply NetworkManager configurations.
+nm-configurator (or NMC) is a CLI tool which makes it easy to generate and apply NetworkManager configurations.
 
 ## How to install it?
 
-### Standard method
+### Download from release
 
 Each release is published with NMC already built for `amd64` and `arm64` Linux systems:
 
-For AMD64 / x86_64 based systems:
-
 ```shell
-$ curl -o nmc -L https://github.com/suse-edge/nm-configurator/releases/latest/download/nmc-x86_64 
+$ curl -o nmc -L https://github.com/suse-edge/nm-configurator/releases/latest/download/nmc-linux-$(uname -m)
 $ chmod +x nmc
 ```
 
-For ARM64 / aarch64 based systems:
-
-```shell
-$ curl -o nmc -L https://github.com/suse-edge/nm-configurator/releases/latest/download/nmc-aarch64
-$ chmod +x nmc
-```
-
-### Manual method
+### Build from source
 
 ```shell
 $ git clone https://github.com/suse-edge/nm-configurator.git
 $ cd nm-configurator
-$ cargo build --release # optionally specify --target flag if cross compiling
+$ cargo build --release # only supports Linux based systems
 ```
 
 ## How to run it?
