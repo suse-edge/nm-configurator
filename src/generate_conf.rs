@@ -27,8 +27,7 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
 
         info!("Generating config from {path:?}...");
 
-        let hostname = path
-            .file_stem()
+        let hostname = extract_host_name(&path)
             .and_then(OsStr::to_str)
             .ok_or_else(|| anyhow!("Invalid file path"))?
             .to_string();
@@ -41,6 +40,17 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
     }
 
     Ok(())
+}
+
+fn extract_host_name(path: &Path) -> Option<&OsStr> {
+    if path
+        .extension()
+        .is_some_and(|ext| ext == "yml" || ext == "yaml")
+    {
+        path.file_stem()
+    } else {
+        path.file_name()
+    }
 }
 
 fn generate_config(data: String) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
