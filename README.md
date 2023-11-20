@@ -92,7 +92,6 @@ Please refer to the official nmstate docs for more extensive [examples](https://
 #### Run NMC
 
 ```shell
-$ export RUST_LOG=info # set log level ("error" by default)
 $ ./nmc generate --config-dir desired-states --output-dir network-config
 [2023-11-20T10:55:56Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
 [2023-11-20T10:55:56Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
@@ -105,18 +104,15 @@ $ ./nmc generate --config-dir desired-states --output-dir network-config
 The output is the following:
 
 ```shell
-$ ls -R network-config
-network-config:
-host_config.yaml  node1  node2  node3
-
-network-config/node1:
-eth0.nmconnection
-
-network-config/node2:
-eth1.nmconnection
-
-network-config/node3:
-eth4.nmconnection
+$ find network-config | sort
+network-config
+network-config/host_config.yaml
+network-config/node1
+network-config/node1/eth0.nmconnection
+network-config/node2
+network-config/node2/eth1.nmconnection
+network-config/node3
+network-config/node3/eth4.nmconnection
 ```
 
 There are separate directories for each host (identified by their input <i>hostname</i>.yaml).
@@ -154,7 +150,6 @@ Simply copy the directory containing the results from `nmc generate` (`network-c
 #### Run NMC
 
 ```shell
-$ export RUST_LOG=info # set log level ("error" by default)
 $ ./nmc apply --config-dir network-config/
 [2023-11-20T11:05:36Z INFO  nmc::apply_conf] Identified host: node2
 [2023-11-20T11:05:36Z INFO  nmc::apply_conf] Copying file... "network-config/node2/eth1.nmconnection"
