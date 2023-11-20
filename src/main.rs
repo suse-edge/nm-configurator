@@ -19,8 +19,6 @@ const SYSTEM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
 fn main() {
-    env_logger::init();
-
     let app = clap::Command::new(APP_NAME)
         .version(clap::crate_version!())
         .about("Command line of NM configurator")
@@ -50,6 +48,12 @@ fn main() {
                         .help("Config dir containing host mapping ('host_config.yaml') \
                          and subdirectories containing *.nmconnection files per host")
                 )
+                .arg(
+                    clap::Arg::new("VERBOSE")
+                        .long("verbose")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Enables DEBUG log level")
+                )
         );
 
     let matches = app.get_matches();
@@ -62,6 +66,8 @@ fn main() {
             let output_dir = cmd
                 .get_one::<String>("OUTPUT-DIR")
                 .expect("--output-dir is required");
+
+            setup_logger(cmd);
 
             match generate(config_dir, output_dir) {
                 Ok(..) => {
@@ -78,6 +84,8 @@ fn main() {
                 .get_one::<String>("CONFIG-DIR")
                 .expect("--config-dir is required");
 
+            setup_logger(cmd);
+
             match apply(config_dir, SYSTEM_CONNECTIONS_DIR) {
                 Ok(..) => {
                     info!("Successfully applied config");
@@ -90,4 +98,16 @@ fn main() {
         }
         _ => unreachable!("Unrecognized subcommand"),
     }
+}
+
+fn setup_logger(matches: &clap::ArgMatches) {
+    let verbose_arg = "VERBOSE";
+
+    let mut log_builder = env_logger::Builder::new();
+    if matches.try_contains_id(verbose_arg).is_ok() && matches.get_flag(verbose_arg) {
+        log_builder.filter(None, log::LevelFilter::Debug);
+    } else {
+        log_builder.filter(None, log::LevelFilter::Info);
+    }
+    log_builder.init();
 }
