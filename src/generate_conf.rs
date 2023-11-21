@@ -27,8 +27,7 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
 
         info!("Generating config from {path:?}...");
 
-        let hostname = path
-            .file_stem()
+        let hostname = extract_hostname(&path)
             .and_then(OsStr::to_str)
             .ok_or_else(|| anyhow!("Invalid file path"))?
             .to_string();
@@ -41,6 +40,17 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
     }
 
     Ok(())
+}
+
+fn extract_hostname(path: &Path) -> Option<&OsStr> {
+    if path
+        .extension()
+        .is_some_and(|ext| ext == "yml" || ext == "yaml")
+    {
+        path.file_stem()
+    } else {
+        path.file_name()
+    }
 }
 
 fn generate_config(data: String) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
@@ -103,7 +113,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::generate_conf::{extract_interfaces, generate, generate_config};
+    use crate::generate_conf::{extract_hostname, extract_interfaces, generate, generate_config};
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
 
@@ -203,5 +213,27 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn extract_host_name() {
+        assert_eq!(extract_hostname("".as_ref()), None);
+        assert_eq!(extract_hostname("node1".as_ref()), Some("node1".as_ref()));
+        assert_eq!(
+            extract_hostname("node1.example".as_ref()),
+            Some("node1.example".as_ref())
+        );
+        assert_eq!(
+            extract_hostname("node1.example.com".as_ref()),
+            Some("node1.example.com".as_ref())
+        );
+        assert_eq!(
+            extract_hostname("node1.example.com.yml".as_ref()),
+            Some("node1.example.com".as_ref())
+        );
+        assert_eq!(
+            extract_hostname("node1.example.com.yaml".as_ref()),
+            Some("node1.example.com".as_ref())
+        );
     }
 }
