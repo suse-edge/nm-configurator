@@ -104,7 +104,10 @@ fn setup_logger(matches: &clap::ArgMatches) {
     let verbose_arg = "VERBOSE";
 
     let mut log_builder = env_logger::Builder::new();
-    if matches.try_contains_id(verbose_arg).is_ok() && matches.get_flag(verbose_arg) {
+    if matches
+        .try_get_one::<bool>(verbose_arg)
+        .is_ok_and(|arg| arg.is_some_and(|&value| value))
+    {
         log_builder.filter(None, log::LevelFilter::Debug);
     } else {
         log_builder.filter(None, log::LevelFilter::Info);
