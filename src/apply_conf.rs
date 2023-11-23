@@ -12,6 +12,7 @@ use crate::types::Host;
 use crate::HOST_MAPPING_FILE;
 
 const CONNECTION_FILE_EXT: &str = "nmconnection";
+const HOSTNAME_FILE: &str = "/etc/hostname";
 
 pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyhow::Error> {
     let hosts = parse_config(source_dir).context("Parsing config")?;
@@ -23,6 +24,8 @@ pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyho
     let host = identify_host(hosts, &network_interfaces)
         .ok_or_else(|| anyhow!("None of the preconfigured hosts match local NICs"))?;
     info!("Identified host: {}", host.hostname);
+
+    fs::write(HOSTNAME_FILE, &host.hostname).context("Setting hostname")?;
 
     copy_connection_files(host, &network_interfaces, source_dir, destination_dir)
 }
