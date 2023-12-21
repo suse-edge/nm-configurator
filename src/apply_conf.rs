@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
 use log::{debug, info, warn};
@@ -119,9 +119,8 @@ fn copy_connection_files(
             filename = nic_name;
         }
 
-        let destination = Path::new(destination_dir)
-            .join(filename)
-            .with_extension(CONNECTION_FILE_EXT);
+        let destination = keyfile_destination_path(destination_dir, filename)
+            .ok_or_else(|| anyhow!("Failed to determine destination path for: '{}'", filename))?;
 
         fs::OpenOptions::new()
             .create(true)
@@ -136,6 +135,21 @@ fn copy_connection_files(
     Ok(())
 }
 
+fn keyfile_destination_path(dir: &str, filename: &str) -> Option<PathBuf> {
+    if dir.is_empty() || filename.is_empty() {
+        return None;
+    }
+
+    let mut destination = Path::new(dir).join(filename).into_os_string();
+
+    // Manually append the extension since Path::with_extension() would overwrite a portion of the
+    // filename (i.e. interface name) in the cases where the interface name contains one or more dots
+    destination.push(".");
+    destination.push(CONNECTION_FILE_EXT);
+
+    Some(destination.into())
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -143,7 +157,9 @@ mod tests {
 
     use network_interface::NetworkInterface;
 
-    use crate::apply_conf::{copy_connection_files, identify_host, parse_config};
+    use crate::apply_conf::{
+        copy_connection_files, identify_host, keyfile_destination_path, parse_config,
+    };
     use crate::types::{Host, Interface};
 
     #[test]
@@ -315,7 +331,7 @@ mod tests {
 
         let source_path = Path::new(source_dir).join("node1");
         let destination_path = Path::new(destination_dir);
-        for entry in fs::read_dir(&source_path)? {
+        for entry in fs::read_dir(source_path)? {
             let entry = entry?;
 
             let mut filename = entry.file_name().into_string().unwrap();
@@ -334,5 +350,15 @@ mod tests {
 
         // cleanup
         fs::remove_dir_all(destination_dir)
+    }
+
+    #[test]
+    fn generate_keyfile_destination_path() {
+        assert!(keyfile_destination_path("some-dir", "eth0")
+            .is_some_and(|p| p.into_os_string().eq("some-dir/eth0.nmconnection")));
+        assert!(keyfile_destination_path("some-dir", "eth0.1234")
+            .is_some_and(|p| p.into_os_string().eq("some-dir/eth0.1234.nmconnection")));
+        assert!(keyfile_destination_path("some-dir", "").is_none());
+        assert!(keyfile_destination_path("", "eth0").is_none());
     }
 }
