@@ -152,7 +152,7 @@ fn keyfile_destination_path(dir: &str, filename: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::{fs, io};
 
     use network_interface::NetworkInterface;
@@ -354,10 +354,14 @@ mod tests {
 
     #[test]
     fn generate_keyfile_destination_path() {
-        assert!(keyfile_destination_path("some-dir", "eth0")
-            .is_some_and(|p| p.into_os_string().eq("some-dir/eth0.nmconnection")));
-        assert!(keyfile_destination_path("some-dir", "eth0.1234")
-            .is_some_and(|p| p.into_os_string().eq("some-dir/eth0.1234.nmconnection")));
+        assert_eq!(
+            keyfile_destination_path("some-dir", "eth0"),
+            Some(PathBuf::from("some-dir/eth0.nmconnection"))
+        );
+        assert_eq!(
+            keyfile_destination_path("some-dir", "eth0.1234"),
+            Some(PathBuf::from("some-dir/eth0.1234.nmconnection"))
+        );
         assert!(keyfile_destination_path("some-dir", "").is_none());
         assert!(keyfile_destination_path("", "eth0").is_none());
     }
