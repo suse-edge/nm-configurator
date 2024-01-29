@@ -10,10 +10,12 @@ uuid=de801aaa-9c69-5f94-ae9b-705b10e92f9c
 
 [ipv4]
 address0=10.88.0.1/16
+dhcp-timeout=2147483647
 method=manual
 
 [ipv6]
 addr-gen-mode=0
+dhcp-timeout=2147483647
 method=link-local
 
 [ethernet]
