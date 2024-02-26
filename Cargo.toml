@@ -15,4 +15,4 @@ log = "0.4.20"
 network-interface = "1.1.1"
 nmstate = { version = "2.2.24", features = ["gen_conf"] }
 serde = { version = "1.0.196", features = ["derive"] }
-serde_yaml = "0.9.30"
+serde_yaml = "0.9.32"
