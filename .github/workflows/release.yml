@@ -31,7 +31,7 @@ jobs:
           container_id=$(docker create nmc:arm64 --entrypoint /)
           docker cp $container_id:/target/release/nmc nmc-linux-aarch64
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             nmc-linux-aarch64
