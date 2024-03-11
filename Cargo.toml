@@ -10,7 +10,7 @@ license = "Apache-2.0"
 [dependencies]
 anyhow = "1.0.80"
 clap = { version = "4.5.1", features = ["cargo"] }
-env_logger = "0.11.2"
+env_logger = "0.11.3"
 log = "0.4.21"
 network-interface = "1.1.1"
 nmstate = { version = "2.2.25", features = ["gen_conf"] }
