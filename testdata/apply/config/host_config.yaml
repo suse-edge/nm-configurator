@@ -17,3 +17,5 @@
     - logical_name: eth0
       mac_address: 36:5E:6B:A2:ED:81
       interface_type: ethernet
+    - logical_name: eth0.1365
+      interface_type: vlan

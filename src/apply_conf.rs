@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context};
 use log::{debug, info, warn};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+use nmstate::InterfaceType;
 
 use crate::types::Host;
 use crate::HOST_MAPPING_FILE;
@@ -99,6 +100,7 @@ fn copy_connection_files(
         if let Some((interface, nic_name)) = host
             .interfaces
             .iter()
+            .filter(|interface| interface.interface_type != InterfaceType::Vlan.to_string())
             .find(|interface| interface.logical_name == filename)
             .and_then(|interface| {
                 network_interfaces
@@ -108,6 +110,13 @@ fn copy_connection_files(
                             .clone()
                             .is_some_and(|addr| addr == interface.mac_address)
                             && nic.name != interface.logical_name
+                    })
+                    .filter(|nic| {
+                        host.interfaces
+                            .iter()
+                            .find(|i| i.logical_name == nic.name)
+                            .filter(|i| i.interface_type == InterfaceType::Vlan.to_string())
+                            .is_none()
                     })
                     .map(|nic| (interface, &nic.name))
             })
@@ -278,11 +287,18 @@ mod tests {
                 },
                 Host {
                     hostname: "node2".to_string(),
-                    interfaces: vec![Interface {
-                        logical_name: "eth0".to_string(),
-                        mac_address: "36:5e:6b:a2:ed:81".to_string(),
-                        interface_type: "ethernet".to_string(),
-                    }],
+                    interfaces: vec![
+                        Interface {
+                            logical_name: "eth0".to_string(),
+                            mac_address: "36:5e:6b:a2:ed:81".to_string(),
+                            interface_type: "ethernet".to_string(),
+                        },
+                        Interface {
+                            logical_name: "eth0.1365".to_string(),
+                            mac_address: "".to_string(),
+                            interface_type: "vlan".to_string(),
+                        },
+                    ],
                 },
             ]
         )
@@ -299,6 +315,11 @@ mod tests {
                     logical_name: "eth0".to_string(),
                     mac_address: "00:11:22:33:44:55".to_string(),
                     interface_type: "ethernet".to_string(),
+                },
+                Interface {
+                    logical_name: "eth0.1365".to_string(),
+                    mac_address: "".to_string(),
+                    interface_type: "vlan".to_string(),
                 },
                 Interface {
                     logical_name: "eth2".to_string(),
@@ -322,6 +343,12 @@ mod tests {
                 name: "eth0".to_string(),
                 mac_addr: Some("00:11:22:33:44:55".to_string()),
                 addr: vec![],
+                index: 0,
+            },
+            NetworkInterface {
+                name: "eth0.1365".to_string(), // VLAN
+                addr: vec![],
+                mac_addr: Some("00:11:22:33:44:55".to_string()),
                 index: 0,
             },
             NetworkInterface {
