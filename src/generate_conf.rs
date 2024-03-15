@@ -71,10 +71,9 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
         .interfaces
         .iter()
         .filter(|i| i.iface_type() != InterfaceType::Loopback)
-        .filter(|i| i.base_iface().mac_address.is_some())
         .map(|i| Interface {
             logical_name: i.name().to_string(),
-            mac_address: i.base_iface().mac_address.clone().unwrap(),
+            mac_address: i.base_iface().mac_address.clone().unwrap_or_default(),
             interface_type: i.iface_type().to_string(),
         })
         .collect()

@@ -11,6 +11,8 @@ pub struct Host {
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Interface {
     pub(crate) logical_name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     pub(crate) mac_address: String,
     pub(crate) interface_type: String,
 }
