@@ -12,4 +12,5 @@ pub struct Host {
 pub struct Interface {
     pub(crate) logical_name: String,
     pub(crate) mac_address: String,
+    pub(crate) interface_type: String,
 }

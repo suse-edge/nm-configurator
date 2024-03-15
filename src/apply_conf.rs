@@ -170,6 +170,7 @@ mod tests {
                 interfaces: vec![Interface {
                     logical_name: "eth0".to_string(),
                     mac_address: "00:11:22:33:44:55".to_string(),
+                    interface_type: "ethernet".to_string(),
                 }],
             },
             Host {
@@ -177,6 +178,7 @@ mod tests {
                 interfaces: vec![Interface {
                     logical_name: "".to_string(),
                     mac_address: "10:10:10:10:10:10".to_string(),
+                    interface_type: "".to_string(),
                 }],
             },
         ];
@@ -202,6 +204,7 @@ mod tests {
             vec![Interface {
                 logical_name: "eth0".to_string(),
                 mac_address: "00:11:22:33:44:55".to_string(),
+                interface_type: "ethernet".to_string(),
             }]
         );
     }
@@ -214,6 +217,7 @@ mod tests {
                 interfaces: vec![Interface {
                     logical_name: "eth0".to_string(),
                     mac_address: "10:20:30:40:50:60".to_string(),
+                    interface_type: "ethernet".to_string(),
                 }],
             },
             Host {
@@ -221,6 +225,7 @@ mod tests {
                 interfaces: vec![Interface {
                     logical_name: "".to_string(),
                     mac_address: "00:10:20:30:40:50".to_string(),
+                    interface_type: "".to_string(),
                 }],
             },
         ];
@@ -252,18 +257,22 @@ mod tests {
                         Interface {
                             logical_name: "eth0".to_string(),
                             mac_address: "00:11:22:33:44:55".to_string(),
+                            interface_type: "ethernet".to_string(),
                         },
                         Interface {
                             logical_name: "eth1".to_string(),
                             mac_address: "00:11:22:33:44:58".to_string(),
+                            interface_type: "ethernet".to_string(),
                         },
                         Interface {
                             logical_name: "eth2".to_string(),
                             mac_address: "36:5e:6b:a2:ed:80".to_string(),
+                            interface_type: "ethernet".to_string(),
                         },
                         Interface {
                             logical_name: "bond0".to_string(),
                             mac_address: "00:11:22:aa:44:58".to_string(),
+                            interface_type: "bond".to_string(),
                         },
                     ],
                 },
@@ -272,6 +281,7 @@ mod tests {
                     interfaces: vec![Interface {
                         logical_name: "eth0".to_string(),
                         mac_address: "36:5e:6b:a2:ed:81".to_string(),
+                        interface_type: "ethernet".to_string(),
                     }],
                 },
             ]
@@ -288,18 +298,22 @@ mod tests {
                 Interface {
                     logical_name: "eth0".to_string(),
                     mac_address: "00:11:22:33:44:55".to_string(),
+                    interface_type: "ethernet".to_string(),
                 },
                 Interface {
                     logical_name: "eth2".to_string(),
                     mac_address: "00:11:22:33:44:56".to_string(),
+                    interface_type: "ethernet".to_string(),
                 },
                 Interface {
                     logical_name: "eth1".to_string(),
                     mac_address: "00:11:22:33:44:57".to_string(),
+                    interface_type: "ethernet".to_string(),
                 },
                 Interface {
                     logical_name: "bond0".to_string(),
                     mac_address: "00:11:22:33:44:58".to_string(),
+                    interface_type: "bond".to_string(),
                 },
             ],
         };
