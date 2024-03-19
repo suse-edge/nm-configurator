@@ -73,7 +73,7 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
         .filter(|i| i.iface_type() != InterfaceType::Loopback)
         .map(|i| Interface {
             logical_name: i.name().to_string(),
-            mac_address: i.base_iface().mac_address.clone().unwrap_or_default(),
+            mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
         })
         .collect()
@@ -203,12 +203,12 @@ mod tests {
             vec![
                 Interface {
                     logical_name: "bridge0".to_string(),
-                    mac_address: "FE:C4:05:42:8B:AB".to_string(),
+                    mac_address: Option::from("FE:C4:05:42:8B:AB".to_string()),
                     interface_type: "linux-bridge".to_string(),
                 },
                 Interface {
                     logical_name: "eth1".to_string(),
-                    mac_address: "FE:C4:05:42:8B:AA".to_string(),
+                    mac_address: Option::from("FE:C4:05:42:8B:AA".to_string()),
                     interface_type: "ethernet".to_string(),
                 },
             ]
