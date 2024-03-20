@@ -16,6 +16,10 @@ type NetworkConfig = Vec<(String, String)>;
 /// Generate network configurations from all YAML files in the `config_dir`
 /// and store the result *.nmconnection files and host mapping under `output_dir`.
 pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
+    if fs::read_dir(config_dir)?.count() == 0 {
+        return Err(anyhow!("Empty config directory"));
+    };
+
     for entry in fs::read_dir(config_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -164,6 +168,16 @@ mod tests {
         fs::remove_dir_all(out_dir)?;
 
         Ok(())
+    }
+
+    #[test]
+    fn generate_fails_due_to_empty_dir() {
+        fs::create_dir_all("empty").unwrap();
+
+        let error = generate("empty", "_out").unwrap_err();
+        assert_eq!(error.to_string(), "Empty config directory");
+
+        fs::remove_dir_all("empty").unwrap();
     }
 
     #[test]
