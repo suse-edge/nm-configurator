@@ -9,8 +9,8 @@ use nmstate::{InterfaceType, NetworkState};
 use crate::types::{Host, Interface};
 use crate::HOST_MAPPING_FILE;
 
-/// NetworkConfig contains the generated configurations in the
-/// following format: Vec<(config_file_name, config_content>)
+/// `NetworkConfig` contains the generated configurations in the
+/// following format: `Vec<(config_file_name, config_content>)`
 type NetworkConfig = Vec<(String, String)>;
 
 /// Generate network configurations from all YAML files in the `config_dir`
@@ -30,7 +30,7 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
         let hostname = extract_hostname(&path)
             .and_then(OsStr::to_str)
             .ok_or_else(|| anyhow!("Invalid file path"))?
-            .to_string();
+            .to_owned();
 
         let data = fs::read_to_string(&path).context("Reading network config")?;
 
@@ -72,7 +72,7 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
         .iter()
         .filter(|i| i.iface_type() != InterfaceType::Loopback)
         .map(|i| Interface {
-            logical_name: i.name().to_string(),
+            logical_name: i.name().to_owned(),
             mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
         })
