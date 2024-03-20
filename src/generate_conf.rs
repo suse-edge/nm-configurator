@@ -323,6 +323,29 @@ mod tests {
     }
 
     #[test]
+    fn validate_interfaces_successfully() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth0.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: None,
+                interface_type: "bond".to_string(),
+            },
+        ];
+
+        assert!(validate_interfaces(&interfaces).is_ok())
+    }
+
+    #[test]
     fn extract_host_name() {
         assert_eq!(extract_hostname("".as_ref()), None);
         assert_eq!(extract_hostname("node1".as_ref()), Some("node1".as_ref()));
