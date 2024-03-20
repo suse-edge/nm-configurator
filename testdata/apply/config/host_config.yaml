@@ -2,13 +2,20 @@
   interfaces:
     - logical_name: eth0
       mac_address: 00:11:22:33:44:55
+      interface_type: ethernet
     - logical_name: eth1
       mac_address: 00:11:22:33:44:58
+      interface_type: ethernet
     - logical_name: eth2
       mac_address: 36:5e:6b:a2:ed:80
+      interface_type: ethernet
     - logical_name: bond0
       mac_address: 00:11:22:AA:44:58
+      interface_type: bond
 - hostname: node2
   interfaces:
     - logical_name: eth0
       mac_address: 36:5E:6B:A2:ED:81
+      interface_type: ethernet
+    - logical_name: eth0.1365
+      interface_type: vlan
