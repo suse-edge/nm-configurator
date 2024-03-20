@@ -61,6 +61,8 @@ fn generate_config(data: String) -> Result<(Vec<Interface>, NetworkConfig), anyh
     let network_state = NetworkState::new_from_yaml(&data)?;
 
     let interfaces = extract_interfaces(&network_state);
+    validate_interfaces(&interfaces)?;
+
     let config = network_state
         .gen_conf()?
         .get("NetworkManager")
@@ -81,6 +83,24 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
             interface_type: i.iface_type().to_string(),
         })
         .collect()
+}
+
+fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
+    let interfaces: Vec<String> = interfaces
+        .iter()
+        .filter(|i| i.interface_type == InterfaceType::Ethernet.to_string())
+        .filter(|i| i.mac_address.is_none())
+        .map(|i| i.logical_name.to_owned())
+        .collect();
+
+    if !interfaces.is_empty() {
+        return Err(anyhow!(
+            "Detected Ethernet interfaces without a MAC address: {}",
+            interfaces.join(", ")
+        ));
+    };
+
+    Ok(())
 }
 
 fn store_network_config(
@@ -117,7 +137,9 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::generate_conf::{extract_hostname, extract_interfaces, generate, generate_config};
+    use crate::generate_conf::{
+        extract_hostname, extract_interfaces, generate, generate_config, validate_interfaces,
+    };
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
 
@@ -229,6 +251,48 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn validate_interfaces_missing_mac_addresses() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth1".to_string(),
+                mac_address: None,
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth2".to_string(),
+                mac_address: Option::from("00:11:22:33:44:56".to_string()),
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth3".to_string(),
+                mac_address: None,
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth3.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:58".to_string()),
+                interface_type: "bond".to_string(),
+            },
+        ];
+
+        let error = validate_interfaces(&interfaces).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Detected Ethernet interfaces without a MAC address: eth1, eth3"
+        )
     }
 
     #[test]
