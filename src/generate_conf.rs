@@ -86,17 +86,25 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
 }
 
 fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
-    let interfaces: Vec<String> = interfaces
+    let ethernet_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| i.interface_type == InterfaceType::Ethernet.to_string())
+        .collect();
+
+    if ethernet_interfaces.is_empty() {
+        return Err(anyhow!("No Ethernet interfaces were provided"));
+    }
+
+    let ethernet_interfaces: Vec<String> = ethernet_interfaces
+        .iter()
         .filter(|i| i.mac_address.is_none())
         .map(|i| i.logical_name.to_owned())
         .collect();
 
-    if !interfaces.is_empty() {
+    if !ethernet_interfaces.is_empty() {
         return Err(anyhow!(
             "Detected Ethernet interfaces without a MAC address: {}",
-            interfaces.join(", ")
+            ethernet_interfaces.join(", ")
         ));
     };
 
@@ -227,7 +235,7 @@ mod tests {
             mac-address: FE:C4:05:42:8B:AB
           - name: lo
             type: loopback
-            mac-address: 00:00:00:00:00:00            
+            mac-address: 00:00:00:00:00:00
         "#,
         )?;
 
@@ -251,6 +259,25 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn validate_interfaces_missing_ethernet_interfaces() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth3.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: None,
+                interface_type: "bond".to_string(),
+            },
+        ];
+
+        let error = validate_interfaces(&interfaces).unwrap_err();
+        assert_eq!(error.to_string(), "No Ethernet interfaces were provided")
     }
 
     #[test]
