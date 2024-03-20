@@ -1,11 +1,11 @@
-use std::ffi::OsStr;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
-use log::{debug, info, warn};
+use log::{debug, info};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use nmstate::InterfaceType;
 
@@ -28,7 +28,8 @@ pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyho
 
     fs::write(HOSTNAME_FILE, &host.hostname).context("Setting hostname")?;
 
-    copy_connection_files(host, &network_interfaces, source_dir, destination_dir)
+    let local_interfaces = detect_local_interfaces(&host, network_interfaces);
+    copy_connection_files(host, local_interfaces, source_dir, destination_dir)
 }
 
 fn parse_config(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
@@ -60,74 +61,90 @@ fn identify_host(hosts: Vec<Host>, network_interfaces: &[NetworkInterface]) -> O
     })
 }
 
+/// Detect and return the differences between the preconfigured interfaces and their local representations.
+///
+/// Examples:
+///     Desired Ethernet "eth0" -> Local "ens1f0"
+///     Desired VLAN "eth0.1365" -> Local "ens1f0.1365"
+fn detect_local_interfaces(
+    host: &Host,
+    network_interfaces: Vec<NetworkInterface>,
+) -> HashMap<String, String> {
+    let mut local_interfaces = HashMap::new();
+
+    host.interfaces
+        .iter()
+        .filter(|interface| interface.interface_type == InterfaceType::Ethernet.to_string())
+        .for_each(|interface| {
+            let detected_interface = network_interfaces.iter().find(|nic| {
+                nic.mac_addr == interface.mac_address
+                    && !host.interfaces.iter().any(|i| i.logical_name == nic.name)
+            });
+            match detected_interface {
+                None => {}
+                Some(detected) => {
+                    local_interfaces.insert(interface.logical_name.clone(), detected.name.clone());
+                }
+            };
+        });
+
+    // Look for non-Ethernet interfaces containing references to Ethernet ones differing from their preconfigured names.
+    local_interfaces.clone().iter().for_each(|(key, value)| {
+        host.interfaces
+            .iter()
+            .filter(|interface| {
+                interface.logical_name.contains(key) && !interface.logical_name.eq(key)
+            })
+            .for_each(|interface| {
+                let name = &interface.logical_name;
+                local_interfaces.insert(name.clone(), name.replace(key, value));
+            })
+    });
+
+    local_interfaces
+}
+
 /// Copy all *.nmconnection files from the preconfigured host dir to the
 /// appropriate NetworkManager dir (default `/etc/NetworkManager/system-connections`).
 fn copy_connection_files(
     host: Host,
-    network_interfaces: &[NetworkInterface],
+    local_interfaces: HashMap<String, String>,
     source_dir: &str,
     destination_dir: &str,
 ) -> Result<(), anyhow::Error> {
     fs::create_dir_all(destination_dir).context("Creating destination dir")?;
 
     let host_config_dir = Path::new(source_dir).join(&host.hostname);
+    let host_config_dir = host_config_dir
+        .to_str()
+        .ok_or_else(|| anyhow!("Determining host config path"))?;
 
-    for entry in fs::read_dir(host_config_dir)? {
-        let entry = entry?;
-        let path = entry.path();
+    for interface in &host.interfaces {
+        info!("Processing interface '{}'...", &interface.logical_name);
 
-        if entry.metadata()?.is_dir()
-            || path
-                .extension()
-                .and_then(OsStr::to_str)
-                .unwrap_or_default()
-                .ne(CONNECTION_FILE_EXT)
-        {
-            warn!("Ignoring unexpected entry: {path:?}");
-            continue;
-        }
+        let mut filename = &interface.logical_name;
 
-        info!("Copying file... {path:?}");
+        let filepath = keyfile_path(host_config_dir, filename)
+            .ok_or_else(|| anyhow!("Determining source keyfile path"))?;
 
-        let mut contents = fs::read_to_string(&path).context("Reading file")?;
-
-        let mut filename = path
-            .file_stem()
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| anyhow!("Invalid file path"))?;
+        let mut contents = fs::read_to_string(filepath).context("Reading file")?;
 
         // Update the name and all references of the host NIC in the settings file if there is a difference from the static config.
-        if let Some((interface, nic_name)) = host
-            .interfaces
-            .iter()
-            .filter(|interface| interface.mac_address.is_some())
-            .filter(|interface| interface.interface_type != InterfaceType::Vlan.to_string())
-            .find(|interface| interface.logical_name == filename)
-            .and_then(|interface| {
-                network_interfaces
-                    .iter()
-                    .find(|nic| {
-                        nic.mac_addr == interface.mac_address && nic.name != interface.logical_name
-                    })
-                    .filter(|nic| {
-                        host.interfaces
-                            .iter()
-                            .find(|i| i.logical_name == nic.name)
-                            .filter(|i| i.interface_type == InterfaceType::Vlan.to_string())
-                            .is_none()
-                    })
-                    .map(|nic| (interface, &nic.name))
-            })
-        {
-            info!("Using name '{}' for interface with MAC address '{:?}' instead of the preconfigured '{}'",
-                nic_name, interface.mac_address, interface.logical_name);
+        match local_interfaces.get(&interface.logical_name) {
+            None => {}
+            Some(local_name) => {
+                info!(
+                    "Using interface name '{}' instead of the preconfigured '{}'",
+                    local_name, interface.logical_name
+                );
 
-            contents = contents.replace(&interface.logical_name, nic_name);
-            filename = nic_name;
+                contents = contents.replace(&interface.logical_name, local_name);
+                filename = local_name;
+            }
         }
 
-        let destination = keyfile_destination_path(destination_dir, filename)
-            .ok_or_else(|| anyhow!("Failed to determine destination path for: '{}'", filename))?;
+        let destination = keyfile_path(destination_dir, filename)
+            .ok_or_else(|| anyhow!("Determining destination keyfile path"))?;
 
         fs::OpenOptions::new()
             .create(true)
@@ -142,7 +159,7 @@ fn copy_connection_files(
     Ok(())
 }
 
-fn keyfile_destination_path(dir: &str, filename: &str) -> Option<PathBuf> {
+fn keyfile_path(dir: &str, filename: &str) -> Option<PathBuf> {
     if dir.is_empty() || filename.is_empty() {
         return None;
     }
@@ -159,13 +176,14 @@ fn keyfile_destination_path(dir: &str, filename: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::path::{Path, PathBuf};
     use std::{fs, io};
 
     use network_interface::NetworkInterface;
 
     use crate::apply_conf::{
-        copy_connection_files, identify_host, keyfile_destination_path, parse_config,
+        copy_connection_files, detect_local_interfaces, identify_host, keyfile_path, parse_config,
     };
     use crate::types::{Host, Interface};
 
@@ -303,6 +321,69 @@ mod tests {
     }
 
     #[test]
+    fn detect_interface_differences() {
+        let host = Host {
+            hostname: "node1".to_string(),
+            interfaces: vec![
+                Interface {
+                    logical_name: "eth0".to_string(),
+                    mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                    interface_type: "ethernet".to_string(),
+                },
+                Interface {
+                    logical_name: "eth0.1365".to_string(),
+                    mac_address: None,
+                    interface_type: "vlan".to_string(),
+                },
+                Interface {
+                    logical_name: "eth2".to_string(),
+                    mac_address: Option::from("00:11:22:33:44:56".to_string()),
+                    interface_type: "ethernet".to_string(),
+                },
+                Interface {
+                    logical_name: "eth2.bridge".to_string(),
+                    mac_address: None,
+                    interface_type: "linux-bridge".to_string(),
+                },
+                Interface {
+                    logical_name: "bond0".to_string(),
+                    mac_address: Option::from("00:11:22:33:44:58".to_string()),
+                    interface_type: "bond".to_string(),
+                },
+            ],
+        };
+        let interfaces = vec![
+            NetworkInterface {
+                name: "eth0".to_string(),
+                mac_addr: Some("00:11:22:33:44:55".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+            NetworkInterface {
+                name: "eth0.1365".to_string(), // VLAN
+                addr: vec![],
+                mac_addr: Some("00:11:22:33:44:55".to_string()),
+                index: 0,
+            },
+            NetworkInterface {
+                name: "ens1f0".to_string(),
+                mac_addr: Some("00:11:22:33:44:56".to_string()),
+                addr: vec![],
+                index: 0,
+            },
+        ];
+
+        let local_interfaces = detect_local_interfaces(&host, interfaces);
+        assert_eq!(
+            local_interfaces,
+            HashMap::from([
+                ("eth2".to_string(), "ens1f0".to_string()),
+                ("eth2.bridge".to_string(), "ens1f0.bridge".to_string())
+            ])
+        )
+    }
+
+    #[test]
     fn copy_connection_files_successfully() -> io::Result<()> {
         let source_dir = "testdata/apply";
         let destination_dir = "_out";
@@ -336,37 +417,11 @@ mod tests {
                 },
             ],
         };
-        let interfaces = [
-            NetworkInterface {
-                name: "eth0".to_string(),
-                mac_addr: Some("00:11:22:33:44:55".to_string()),
-                addr: vec![],
-                index: 0,
-            },
-            NetworkInterface {
-                name: "eth0.1365".to_string(), // VLAN
-                addr: vec![],
-                mac_addr: Some("00:11:22:33:44:55".to_string()),
-                index: 0,
-            },
-            NetworkInterface {
-                name: "eth4".to_string(),
-                mac_addr: Some("00:11:22:33:44:56".to_string()),
-                addr: vec![],
-                index: 0,
-            },
-            NetworkInterface {
-                name: "eth1".to_string(),
-                mac_addr: Some("00:11:22:33:44:57".to_string()),
-                addr: vec![],
-                index: 0,
-            },
-            // NetworkInterface {
-            //     name: "bond0", Excluded on purpose, "bond0.nmconnection" should still be copied
-            // },
-        ];
+        let detected_interfaces = HashMap::from([("eth2".to_string(), "eth4".to_string())]);
 
-        assert!(copy_connection_files(host, &interfaces, source_dir, destination_dir).is_ok());
+        assert!(
+            copy_connection_files(host, detected_interfaces, source_dir, destination_dir).is_ok()
+        );
 
         let source_path = Path::new(source_dir).join("node1");
         let destination_path = Path::new(destination_dir);
@@ -392,16 +447,16 @@ mod tests {
     }
 
     #[test]
-    fn generate_keyfile_destination_path() {
+    fn generate_keyfile_path() {
         assert_eq!(
-            keyfile_destination_path("some-dir", "eth0"),
+            keyfile_path("some-dir", "eth0"),
             Some(PathBuf::from("some-dir/eth0.nmconnection"))
         );
         assert_eq!(
-            keyfile_destination_path("some-dir", "eth0.1234"),
+            keyfile_path("some-dir", "eth0.1234"),
             Some(PathBuf::from("some-dir/eth0.1234.nmconnection"))
         );
-        assert!(keyfile_destination_path("some-dir", "").is_none());
-        assert!(keyfile_destination_path("", "eth0").is_none());
+        assert!(keyfile_path("some-dir", "").is_none());
+        assert!(keyfile_path("", "eth0").is_none());
     }
 }
