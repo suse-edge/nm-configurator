@@ -1,4 +1,4 @@
-FROM registry.suse.com/bci/rust:1.73
+FROM registry.suse.com/bci/rust:1.74
 
 COPY . /
 WORKDIR /
