@@ -9,13 +9,17 @@ use nmstate::{InterfaceType, NetworkState};
 use crate::types::{Host, Interface};
 use crate::HOST_MAPPING_FILE;
 
-/// NetworkConfig contains the generated configurations in the
-/// following format: Vec<(config_file_name, config_content>)
+/// `NetworkConfig` contains the generated configurations in the
+/// following format: `Vec<(config_file_name, config_content>)`
 type NetworkConfig = Vec<(String, String)>;
 
 /// Generate network configurations from all YAML files in the `config_dir`
 /// and store the result *.nmconnection files and host mapping under `output_dir`.
 pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
+    if fs::read_dir(config_dir)?.count() == 0 {
+        return Err(anyhow!("Empty config directory"));
+    };
+
     for entry in fs::read_dir(config_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -30,7 +34,7 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
         let hostname = extract_hostname(&path)
             .and_then(OsStr::to_str)
             .ok_or_else(|| anyhow!("Invalid file path"))?
-            .to_string();
+            .to_owned();
 
         let data = fs::read_to_string(&path).context("Reading network config")?;
 
@@ -57,6 +61,8 @@ fn generate_config(data: String) -> Result<(Vec<Interface>, NetworkConfig), anyh
     let network_state = NetworkState::new_from_yaml(&data)?;
 
     let interfaces = extract_interfaces(&network_state);
+    validate_interfaces(&interfaces)?;
+
     let config = network_state
         .gen_conf()?
         .get("NetworkManager")
@@ -72,11 +78,37 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
         .iter()
         .filter(|i| i.iface_type() != InterfaceType::Loopback)
         .map(|i| Interface {
-            logical_name: i.name().to_string(),
+            logical_name: i.name().to_owned(),
             mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
         })
         .collect()
+}
+
+fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
+    let ethernet_interfaces: Vec<&Interface> = interfaces
+        .iter()
+        .filter(|i| i.interface_type == InterfaceType::Ethernet.to_string())
+        .collect();
+
+    if ethernet_interfaces.is_empty() {
+        return Err(anyhow!("No Ethernet interfaces were provided"));
+    }
+
+    let ethernet_interfaces: Vec<String> = ethernet_interfaces
+        .iter()
+        .filter(|i| i.mac_address.is_none())
+        .map(|i| i.logical_name.to_owned())
+        .collect();
+
+    if !ethernet_interfaces.is_empty() {
+        return Err(anyhow!(
+            "Detected Ethernet interfaces without a MAC address: {}",
+            ethernet_interfaces.join(", ")
+        ));
+    };
+
+    Ok(())
 }
 
 fn store_network_config(
@@ -113,7 +145,9 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::generate_conf::{extract_hostname, extract_interfaces, generate, generate_config};
+    use crate::generate_conf::{
+        extract_hostname, extract_interfaces, generate, generate_config, validate_interfaces,
+    };
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
 
@@ -167,6 +201,16 @@ mod tests {
     }
 
     #[test]
+    fn generate_fails_due_to_empty_dir() {
+        fs::create_dir_all("empty").unwrap();
+
+        let error = generate("empty", "_out").unwrap_err();
+        assert_eq!(error.to_string(), "Empty config directory");
+
+        fs::remove_dir_all("empty").unwrap();
+    }
+
+    #[test]
     fn generate_fails_due_to_missing_path() {
         let error = generate("<missing>", "_out").unwrap_err();
         assert!(error.to_string().contains("No such file or directory"))
@@ -191,7 +235,7 @@ mod tests {
             mac-address: FE:C4:05:42:8B:AB
           - name: lo
             type: loopback
-            mac-address: 00:00:00:00:00:00            
+            mac-address: 00:00:00:00:00:00
         "#,
         )?;
 
@@ -215,6 +259,90 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn validate_interfaces_missing_ethernet_interfaces() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth3.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: None,
+                interface_type: "bond".to_string(),
+            },
+        ];
+
+        let error = validate_interfaces(&interfaces).unwrap_err();
+        assert_eq!(error.to_string(), "No Ethernet interfaces were provided")
+    }
+
+    #[test]
+    fn validate_interfaces_missing_mac_addresses() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth1".to_string(),
+                mac_address: None,
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth2".to_string(),
+                mac_address: Option::from("00:11:22:33:44:56".to_string()),
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth3".to_string(),
+                mac_address: None,
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth3.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:58".to_string()),
+                interface_type: "bond".to_string(),
+            },
+        ];
+
+        let error = validate_interfaces(&interfaces).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Detected Ethernet interfaces without a MAC address: eth1, eth3"
+        )
+    }
+
+    #[test]
+    fn validate_interfaces_successfully() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                interface_type: "ethernet".to_string(),
+            },
+            Interface {
+                logical_name: "eth0.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: None,
+                interface_type: "bond".to_string(),
+            },
+        ];
+
+        assert!(validate_interfaces(&interfaces).is_ok())
     }
 
     #[test]
