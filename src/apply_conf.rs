@@ -148,6 +148,7 @@ fn copy_connection_files(
 
         fs::OpenOptions::new()
             .create(true)
+            .truncate(true)
             .write(true)
             .mode(0o600)
             .open(&destination)
