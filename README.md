@@ -93,10 +93,10 @@ Please refer to the official nmstate docs for more extensive [examples](https://
 
 ```shell
 $ ./nmc generate --config-dir desired-states --output-dir network-config
-[2023-11-20T10:55:56Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
-[2023-11-20T10:55:56Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
-[2023-11-20T10:55:56Z INFO  nmc::generate_conf] Generating config from "desired-states/node3.yaml"...
-[2023-11-20T10:55:56Z INFO  nmc] Successfully generated and stored network config
+[2024-04-03T07:47:50Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
+[2024-04-03T07:47:50Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
+[2024-04-03T07:47:50Z INFO  nmc::generate_conf] Generating config from "desired-states/node3.yaml"...
+[2024-04-03T07:47:50Z INFO  nmc] Successfully generated and stored network config
 ```
 
 #### Examine results
@@ -126,14 +126,17 @@ This is necessary in order for NMC to identify which host it is running on when 
   interfaces:
     - logical_name: eth0
       mac_address: FE:C4:05:42:8B:AA
+      interface_type: ethernet
 - hostname: node2
   interfaces:
     - logical_name: eth1
       mac_address: FE:C4:05:42:8B:AB
+      interface_type: ethernet
 - hostname: node3
   interfaces:
     - logical_name: eth4
       mac_address: FE:C4:05:42:8B:AC
+      interface_type: ethernet
 ```
 
 ### Apply config
@@ -151,9 +154,9 @@ Simply copy the directory containing the results from `nmc generate` (`network-c
 
 ```shell
 $ ./nmc apply --config-dir network-config/
-[2023-11-20T11:05:36Z INFO  nmc::apply_conf] Identified host: node2
-[2023-11-20T11:05:36Z INFO  nmc::apply_conf] Copying file... "network-config/node2/eth1.nmconnection"
-[2023-11-20T11:05:36Z INFO  nmc] Successfully applied config
+[2024-04-03T07:50:55Z INFO  nmc::apply_conf] Identified host: node2
+[2024-04-03T07:50:55Z INFO  nmc::apply_conf] Processing interface 'eth1'...
+[2024-04-03T07:50:55Z INFO  nmc] Successfully applied config
 ```
 
 **NOTE:** Interface names during the installation of nodes might differ from the preconfigured logical ones.
