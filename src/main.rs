@@ -12,9 +12,6 @@ const APP_NAME: &str = "nmc";
 const SUB_CMD_GENERATE: &str = "generate";
 const SUB_CMD_APPLY: &str = "apply";
 
-/// Destination directory to store the *.nmconnection files for NetworkManager.
-const SYSTEM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
-
 /// File storing a mapping between host identifier (usually hostname) and its preconfigured network interfaces.
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
 
@@ -86,7 +83,7 @@ fn main() {
 
             setup_logger(cmd);
 
-            match apply(config_dir, SYSTEM_CONNECTIONS_DIR) {
+            match apply(config_dir) {
                 Ok(..) => {
                     info!("Successfully applied config");
                 }

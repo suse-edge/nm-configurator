@@ -12,10 +12,15 @@ use nmstate::InterfaceType;
 use crate::types::Host;
 use crate::HOST_MAPPING_FILE;
 
+/// Destination directory to store the *.nmconnection files for NetworkManager.
+const STATIC_SYSTEM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
+const RUNTIME_SYSTEM_CONNECTIONS_DIR: &str = "/var/run/NetworkManager/system-connections";
+/// Configuration directory for NetworkManager options.
+const CONFIG_DIR: &str = "/etc/NetworkManager/conf.d";
 const CONNECTION_FILE_EXT: &str = "nmconnection";
 const HOSTNAME_FILE: &str = "/etc/hostname";
 
-pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyhow::Error> {
+pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
     let hosts = parse_config(source_dir).context("Parsing config")?;
     debug!("Loaded hosts config: {hosts:?}");
 
@@ -27,9 +32,18 @@ pub(crate) fn apply(source_dir: &str, destination_dir: &str) -> Result<(), anyho
     info!("Identified host: {}", host.hostname);
 
     fs::write(HOSTNAME_FILE, &host.hostname).context("Setting hostname")?;
+    info!("Set hostname: {}", host.hostname);
+
+    disable_wired_connections(CONFIG_DIR, RUNTIME_SYSTEM_CONNECTIONS_DIR)
+        .context("Disabling wired connections")?;
 
     let local_interfaces = detect_local_interfaces(&host, network_interfaces);
-    copy_connection_files(host, local_interfaces, source_dir, destination_dir)
+    copy_connection_files(
+        host,
+        local_interfaces,
+        source_dir,
+        STATIC_SYSTEM_CONNECTIONS_DIR,
+    )
 }
 
 fn parse_config(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
@@ -175,6 +189,25 @@ fn keyfile_path(dir: &str, filename: &str) -> Option<PathBuf> {
     Some(destination.into())
 }
 
+fn disable_wired_connections(config_dir: &str, conn_dir: &str) -> Result<(), anyhow::Error> {
+    let _ = fs::remove_dir_all(conn_dir);
+    fs::create_dir_all(conn_dir).context(format!("Recreating {} directory", conn_dir))?;
+
+    fs::create_dir_all(config_dir).context(format!("Creating {} directory", config_dir))?;
+
+    let config_path = Path::new(config_dir).join("no-auto-default.conf");
+    let config_contents = "[main]\nno-auto-default=*\n";
+
+    fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(config_path)
+        .context("Creating config file")?
+        .write_all(config_contents.as_bytes())
+        .context("Writing config file")
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -184,9 +217,25 @@ mod tests {
     use network_interface::NetworkInterface;
 
     use crate::apply_conf::{
-        copy_connection_files, detect_local_interfaces, identify_host, keyfile_path, parse_config,
+        copy_connection_files, detect_local_interfaces, disable_wired_connections, identify_host,
+        keyfile_path, parse_config,
     };
     use crate::types::{Host, Interface};
+
+    #[test]
+    fn disable_wired_conn() {
+        assert!(disable_wired_connections("config", "connections").is_ok());
+
+        assert!(Path::new("config").exists());
+        assert!(Path::new("connections").exists());
+
+        let config_contents = fs::read_to_string("config/no-auto-default.conf").unwrap();
+        assert_eq!(config_contents, "[main]\nno-auto-default=*\n");
+
+        // cleanup
+        assert!(fs::remove_dir_all("config").is_ok());
+        assert!(fs::remove_dir_all("connections").is_ok());
+    }
 
     #[test]
     fn identify_host_successfully() {
