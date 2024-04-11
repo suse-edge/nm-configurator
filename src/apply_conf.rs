@@ -34,9 +34,6 @@ pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
     fs::write(HOSTNAME_FILE, &host.hostname).context("Setting hostname")?;
     info!("Set hostname: {}", host.hostname);
 
-    disable_wired_connections(CONFIG_DIR, RUNTIME_SYSTEM_CONNECTIONS_DIR)
-        .context("Disabling wired connections")?;
-
     let local_interfaces = detect_local_interfaces(&host, network_interfaces);
     copy_connection_files(
         host,
@@ -44,6 +41,10 @@ pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
         source_dir,
         STATIC_SYSTEM_CONNECTIONS_DIR,
     )
+    .context("Copying connection files")?;
+
+    disable_wired_connections(CONFIG_DIR, RUNTIME_SYSTEM_CONNECTIONS_DIR)
+        .context("Disabling wired connections")
 }
 
 fn parse_config(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
