@@ -7,17 +7,28 @@ use log::{info, warn};
 use nmstate::{InterfaceType, NetworkState};
 
 use crate::types::{Host, Interface};
-use crate::HOST_MAPPING_FILE;
+use crate::{ALL_NODES_DIR, ALL_NODES_FILE, HOST_MAPPING_FILE};
 
 /// `NetworkConfig` contains the generated configurations in the
 /// following format: `Vec<(config_file_name, config_content>)`
 type NetworkConfig = Vec<(String, String)>;
 
 /// Generate network configurations from all YAML files in the `config_dir`
-/// and store the result *.nmconnection files and host mapping under `output_dir`.
+/// and store the result *.nmconnection files and host mapping (if applicable) under `output_dir`.
 pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
-    if fs::read_dir(config_dir)?.count() == 0 {
+    let files_count = fs::read_dir(config_dir)?.count();
+
+    if files_count == 0 {
         return Err(anyhow!("Empty config directory"));
+    } else if files_count == 1 {
+        let path = Path::new(config_dir).join(ALL_NODES_FILE);
+        if let Ok(contents) = fs::read_to_string(&path) {
+            info!("Generating config from {path:?}...");
+
+            let (_, config) = generate_config(contents)?;
+            return store_network_config(output_dir, ALL_NODES_DIR, config)
+                .context("Storing network config");
+        };
     };
 
     for entry in fs::read_dir(config_dir)? {
@@ -40,7 +51,9 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
 
         let (interfaces, config) = generate_config(data)?;
 
-        store_network_config(output_dir, hostname, interfaces, config).context("Storing config")?;
+        store_network_config(output_dir, &hostname, config).context("Storing network config")?;
+        store_network_mapping(output_dir, hostname, interfaces)
+            .context("Storing network mapping")?;
     }
 
     Ok(())
@@ -113,19 +126,26 @@ fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
 
 fn store_network_config(
     output_dir: &str,
-    hostname: String,
-    interfaces: Vec<Interface>,
+    hostname: &str,
     config: NetworkConfig,
 ) -> Result<(), anyhow::Error> {
-    let path = Path::new(output_dir);
+    let path = Path::new(output_dir).join(hostname);
 
-    fs::create_dir_all(path.join(&hostname)).context("Creating output dir")?;
+    fs::create_dir_all(&path).context("Creating output dir")?;
 
     config.iter().try_for_each(|(filename, content)| {
-        let path = path.join(&hostname).join(filename);
+        let path = path.join(filename);
 
         fs::write(path, content).context("Writing config file")
-    })?;
+    })
+}
+
+fn store_network_mapping(
+    output_dir: &str,
+    hostname: String,
+    interfaces: Vec<Interface>,
+) -> Result<(), anyhow::Error> {
+    let path = Path::new(output_dir);
 
     let mapping_file = fs::OpenOptions::new()
         .create(true)
