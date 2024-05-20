@@ -1,16 +1,17 @@
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
-use log::{debug, info};
+use log::{debug, info, warn};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use nmstate::InterfaceType;
 
 use crate::types::Host;
-use crate::HOST_MAPPING_FILE;
+use crate::{ALL_NODES_DIR, HOST_MAPPING_FILE};
 
 /// Destination directory to store the *.nmconnection files for NetworkManager.
 const STATIC_SYSTEM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
@@ -21,33 +22,40 @@ const CONNECTION_FILE_EXT: &str = "nmconnection";
 const HOSTNAME_FILE: &str = "/etc/hostname";
 
 pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
-    let hosts = parse_config(source_dir).context("Parsing config")?;
-    debug!("Loaded hosts config: {hosts:?}");
+    let unified_config_path = Path::new(source_dir).join(ALL_NODES_DIR);
 
-    let network_interfaces = NetworkInterface::show()?;
-    debug!("Retrieved network interfaces: {network_interfaces:?}");
+    if unified_config_path.exists() {
+        info!("Applying unified config...");
+        copy_unified_connection_files(unified_config_path, STATIC_SYSTEM_CONNECTIONS_DIR)?;
+    } else {
+        let hosts = parse_hosts(source_dir).context("Parsing config")?;
+        debug!("Loaded hosts config: {hosts:?}");
 
-    let host = identify_host(hosts, &network_interfaces)
-        .ok_or_else(|| anyhow!("None of the preconfigured hosts match local NICs"))?;
-    info!("Identified host: {}", host.hostname);
+        let network_interfaces = NetworkInterface::show()?;
+        debug!("Retrieved network interfaces: {network_interfaces:?}");
 
-    fs::write(HOSTNAME_FILE, &host.hostname).context("Setting hostname")?;
-    info!("Set hostname: {}", host.hostname);
+        let host = identify_host(hosts, &network_interfaces)
+            .ok_or_else(|| anyhow!("None of the preconfigured hosts match local NICs"))?;
+        info!("Identified host: {}", host.hostname);
 
-    let local_interfaces = detect_local_interfaces(&host, network_interfaces);
-    copy_connection_files(
-        host,
-        local_interfaces,
-        source_dir,
-        STATIC_SYSTEM_CONNECTIONS_DIR,
-    )
-    .context("Copying connection files")?;
+        fs::write(HOSTNAME_FILE, &host.hostname).context("Setting hostname")?;
+        info!("Set hostname: {}", host.hostname);
+
+        let local_interfaces = detect_local_interfaces(&host, network_interfaces);
+        copy_connection_files(
+            host,
+            local_interfaces,
+            source_dir,
+            STATIC_SYSTEM_CONNECTIONS_DIR,
+        )
+        .context("Copying connection files")?;
+    }
 
     disable_wired_connections(CONFIG_DIR, RUNTIME_SYSTEM_CONNECTIONS_DIR)
         .context("Disabling wired connections")
 }
 
-fn parse_config(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
+fn parse_hosts(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
     let config_file = Path::new(source_dir).join(HOST_MAPPING_FILE);
 
     let file = fs::File::open(config_file)?;
@@ -121,6 +129,45 @@ fn detect_local_interfaces(
 
 /// Copy all *.nmconnection files from the preconfigured host dir to the
 /// appropriate NetworkManager dir (default `/etc/NetworkManager/system-connections`).
+fn copy_unified_connection_files(
+    source_dir: PathBuf,
+    destination_dir: &str,
+) -> Result<(), anyhow::Error> {
+    fs::create_dir_all(destination_dir).context("Creating destination dir")?;
+
+    for entry in fs::read_dir(source_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if entry.metadata()?.is_dir()
+            || path
+                .extension()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .ne(CONNECTION_FILE_EXT)
+        {
+            warn!("Ignoring unexpected entry: {path:?}");
+            continue;
+        }
+
+        info!("Copying file... {path:?}");
+
+        let contents = fs::read_to_string(&path).context("Reading file")?;
+
+        let filename = path
+            .file_stem()
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| anyhow!("Invalid file path"))?;
+
+        store_connection_file(filename, contents, destination_dir).context("Storing file")?;
+    }
+
+    Ok(())
+}
+
+/// Copy all *.nmconnection files from the preconfigured host dir to the
+/// appropriate NetworkManager dir (default `/etc/NetworkManager/system-connections`)
+/// applying interface naming adjustments if necessary.
 fn copy_connection_files(
     host: Host,
     local_interfaces: HashMap<String, String>,
@@ -158,21 +205,29 @@ fn copy_connection_files(
             }
         }
 
-        let destination = keyfile_path(destination_dir, filename)
-            .ok_or_else(|| anyhow!("Determining destination keyfile path"))?;
-
-        fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .mode(0o600)
-            .open(&destination)
-            .context("Creating file")?
-            .write_all(contents.as_bytes())
-            .context("Writing file")?;
+        store_connection_file(filename, contents, destination_dir).context("Storing file")?;
     }
 
     Ok(())
+}
+
+fn store_connection_file(
+    filename: &str,
+    contents: String,
+    destination_dir: &str,
+) -> Result<(), anyhow::Error> {
+    let destination = keyfile_path(destination_dir, filename)
+        .ok_or_else(|| anyhow!("Determining destination keyfile path"))?;
+
+    fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .open(destination)
+        .context("Creating file")?
+        .write_all(contents.as_bytes())
+        .context("Writing file")
 }
 
 fn keyfile_path(dir: &str, filename: &str) -> Option<PathBuf> {
@@ -219,7 +274,7 @@ mod tests {
 
     use crate::apply_conf::{
         copy_connection_files, detect_local_interfaces, disable_wired_connections, identify_host,
-        keyfile_path, parse_config,
+        keyfile_path, parse_hosts,
     };
     use crate::types::{Host, Interface};
 
@@ -316,14 +371,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_config_fails_due_to_missing_file() {
-        let error = parse_config("<missing>").unwrap_err();
+    fn parse_hosts_fails_due_to_missing_file() {
+        let error = parse_hosts("<missing>").unwrap_err();
         assert!(error.to_string().contains("No such file or directory"))
     }
 
     #[test]
-    fn parse_config_successfully() {
-        let hosts = parse_config("testdata/apply/config").unwrap();
+    fn parse_hosts_successfully() {
+        let hosts = parse_hosts("testdata/apply/config").unwrap();
         assert_eq!(
             hosts,
             vec![
