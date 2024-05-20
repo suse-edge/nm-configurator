@@ -273,8 +273,8 @@ mod tests {
     use network_interface::NetworkInterface;
 
     use crate::apply_conf::{
-        copy_connection_files, detect_local_interfaces, disable_wired_connections, identify_host,
-        keyfile_path, parse_hosts,
+        copy_connection_files, copy_unified_connection_files, detect_local_interfaces,
+        disable_wired_connections, identify_host, keyfile_path, parse_hosts,
     };
     use crate::types::{Host, Interface};
 
@@ -487,6 +487,28 @@ mod tests {
                 ("eth2.bridge".to_string(), "ens1f0.bridge".to_string())
             ])
         )
+    }
+
+    #[test]
+    fn copy_unified_connection_files_successfully() -> io::Result<()> {
+        let source_dir = "testdata/apply/node1";
+        let destination_dir = "_all-out";
+
+        assert!(copy_unified_connection_files(source_dir.into(), destination_dir).is_ok());
+
+        let destination_path = Path::new(destination_dir);
+        for entry in fs::read_dir(source_dir)? {
+            let entry = entry?;
+            let filename = entry.file_name().into_string().unwrap();
+
+            let input = fs::read_to_string(entry.path())?;
+            let output = fs::read_to_string(destination_path.join(&filename))?;
+
+            assert_eq!(input, output);
+        }
+
+        // cleanup
+        fs::remove_dir_all(destination_dir)
     }
 
     #[test]
