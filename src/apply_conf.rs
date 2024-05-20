@@ -11,7 +11,7 @@ use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use nmstate::InterfaceType;
 
 use crate::types::Host;
-use crate::{ALL_NODES_DIR, HOST_MAPPING_FILE};
+use crate::{ALL_HOSTS_DIR, HOST_MAPPING_FILE};
 
 /// Destination directory to store the *.nmconnection files for NetworkManager.
 const STATIC_SYSTEM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
@@ -22,7 +22,7 @@ const CONNECTION_FILE_EXT: &str = "nmconnection";
 const HOSTNAME_FILE: &str = "/etc/hostname";
 
 pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
-    let unified_config_path = Path::new(source_dir).join(ALL_NODES_DIR);
+    let unified_config_path = Path::new(source_dir).join(ALL_HOSTS_DIR);
 
     if unified_config_path.exists() {
         info!("Applying unified config...");

@@ -14,10 +14,10 @@ const SUB_CMD_APPLY: &str = "apply";
 
 /// File storing a mapping between host identifier (usually hostname) and its preconfigured network interfaces.
 const HOST_MAPPING_FILE: &str = "host_config.yaml";
-/// File storing input configurations applicable for all nodes.
-const ALL_NODES_FILE: &str = "_all-nodes.yaml";
-/// Directory storing output configurations applicable for all nodes.
-const ALL_NODES_DIR: &str = "_all-nodes";
+/// File storing input configurations applicable for all hosts.
+const ALL_HOSTS_FILE: &str = "_all.yaml";
+/// Directory storing output configurations applicable for all hosts.
+const ALL_HOSTS_DIR: &str = "_all";
 
 fn main() {
     let app = clap::Command::new(APP_NAME)

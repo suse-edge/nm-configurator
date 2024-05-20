@@ -7,7 +7,7 @@ use log::{info, warn};
 use nmstate::{InterfaceType, NetworkState};
 
 use crate::types::{Host, Interface};
-use crate::{ALL_NODES_DIR, ALL_NODES_FILE, HOST_MAPPING_FILE};
+use crate::{ALL_HOSTS_DIR, ALL_HOSTS_FILE, HOST_MAPPING_FILE};
 
 /// `NetworkConfig` contains the generated configurations in the
 /// following format: `Vec<(config_file_name, config_content>)`
@@ -21,12 +21,12 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
     if files_count == 0 {
         return Err(anyhow!("Empty config directory"));
     } else if files_count == 1 {
-        let path = Path::new(config_dir).join(ALL_NODES_FILE);
+        let path = Path::new(config_dir).join(ALL_HOSTS_FILE);
         if let Ok(contents) = fs::read_to_string(&path) {
             info!("Generating config from {path:?}...");
 
             let (_, config) = generate_config(contents)?;
-            return store_network_config(output_dir, ALL_NODES_DIR, config)
+            return store_network_config(output_dir, ALL_HOSTS_DIR, config)
                 .context("Storing network config");
         };
     };
