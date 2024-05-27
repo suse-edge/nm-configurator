@@ -182,10 +182,19 @@ interfaces:
   type: ethernet
   state: up
   ipv4:
+    dhcp: true
+    enabled: true
+  ipv6:
+    enabled: false
+- name: eth1
+  type: ethernet
+  state: up
+  ipv4:
     address:
-    - ip: 192.168.125.250
+    - ip: 10.0.0.1
       prefix-length: 24
     enabled: true
+    dhcp: false
   ipv6:
     enabled: false
 EOF
@@ -195,13 +204,14 @@ EOF
 
 ```shell
 $ ./nmc generate --config-dir desired-states --output-dir network-config
-[2024-05-20T23:39:22Z INFO  nmc::generate_conf] Generating config from "desired-states/_all.yaml"...
-[2024-05-20T23:39:22Z INFO  nmc] Successfully generated and stored network config
+[2024-05-27T07:23:20Z INFO  nmc::generate_conf] Generating config from "desired-states/_all.yaml"...
+[2024-05-27T07:23:20Z INFO  nmc] Successfully generated and stored network config
 
 $ find network-config | sort
 network-config
 network-config/_all
 network-config/_all/eth0.nmconnection
+network-config/_all/eth1.nmconnection
 ```
 
 **NOTE:** The `host_config.yaml` file will not be present since host mapping is not necessary.
@@ -210,10 +220,11 @@ network-config/_all/eth0.nmconnection
 
 ```shell
 $ ./nmc apply --config-dir network-config
-[2024-05-20T23:46:47Z INFO  nmc::apply_conf] Applying unified config...
-[2024-05-20T23:46:47Z INFO  nmc::apply_conf] Copying file... "network-config/_all/eth0.nmconnection"
-[2024-05-20T23:46:47Z INFO  nmc] Successfully applied config
+[2024-05-27T07:24:03Z INFO  nmc::apply_conf] Applying unified config...
+[2024-05-27T07:24:03Z INFO  nmc::apply_conf] Copying file... "network-config/_all/eth0.nmconnection"
+[2024-05-27T07:24:03Z INFO  nmc::apply_conf] Copying file... "network-config/_all/eth1.nmconnection"
+[2024-05-27T07:24:03Z INFO  nmc] Successfully applied config
 
 $ ls /etc/NetworkManager/system-connections
-eth0.nmconnection
+eth0.nmconnection eth1.nmconnection
 ```
