@@ -7,17 +7,28 @@ use log::{info, warn};
 use nmstate::{InterfaceType, NetworkState};
 
 use crate::types::{Host, Interface};
-use crate::HOST_MAPPING_FILE;
+use crate::{ALL_HOSTS_DIR, ALL_HOSTS_FILE, HOST_MAPPING_FILE};
 
 /// `NetworkConfig` contains the generated configurations in the
 /// following format: `Vec<(config_file_name, config_content>)`
 type NetworkConfig = Vec<(String, String)>;
 
 /// Generate network configurations from all YAML files in the `config_dir`
-/// and store the result *.nmconnection files and host mapping under `output_dir`.
+/// and store the result *.nmconnection files and host mapping (if applicable) under `output_dir`.
 pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
-    if fs::read_dir(config_dir)?.count() == 0 {
+    let files_count = fs::read_dir(config_dir)?.count();
+
+    if files_count == 0 {
         return Err(anyhow!("Empty config directory"));
+    } else if files_count == 1 {
+        let path = Path::new(config_dir).join(ALL_HOSTS_FILE);
+        if let Ok(contents) = fs::read_to_string(&path) {
+            info!("Generating config from {path:?}...");
+
+            let (_, config) = generate_config(contents, false)?;
+            return store_network_config(output_dir, ALL_HOSTS_DIR, config)
+                .context("Storing network config");
+        };
     };
 
     for entry in fs::read_dir(config_dir)? {
@@ -38,9 +49,11 @@ pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow:
 
         let data = fs::read_to_string(&path).context("Reading network config")?;
 
-        let (interfaces, config) = generate_config(data)?;
+        let (interfaces, config) = generate_config(data, true)?;
 
-        store_network_config(output_dir, hostname, interfaces, config).context("Storing config")?;
+        store_network_config(output_dir, &hostname, config).context("Storing network config")?;
+        store_network_mapping(output_dir, hostname, interfaces)
+            .context("Storing network mapping")?;
     }
 
     Ok(())
@@ -57,11 +70,14 @@ fn extract_hostname(path: &Path) -> Option<&OsStr> {
     }
 }
 
-fn generate_config(data: String) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
+fn generate_config(
+    data: String,
+    require_mac_addresses: bool,
+) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
     let network_state = NetworkState::new_from_yaml(&data)?;
 
     let interfaces = extract_interfaces(&network_state);
-    validate_interfaces(&interfaces)?;
+    validate_interfaces(&interfaces, require_mac_addresses)?;
 
     let config = network_state
         .gen_conf()?
@@ -85,7 +101,10 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
         .collect()
 }
 
-fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
+fn validate_interfaces(
+    interfaces: &[Interface],
+    require_mac_addresses: bool,
+) -> anyhow::Result<()> {
     let ethernet_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| i.interface_type == InterfaceType::Ethernet.to_string())
@@ -93,6 +112,10 @@ fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
 
     if ethernet_interfaces.is_empty() {
         return Err(anyhow!("No Ethernet interfaces were provided"));
+    }
+
+    if !require_mac_addresses {
+        return Ok(());
     }
 
     let ethernet_interfaces: Vec<String> = ethernet_interfaces
@@ -113,19 +136,26 @@ fn validate_interfaces(interfaces: &[Interface]) -> anyhow::Result<()> {
 
 fn store_network_config(
     output_dir: &str,
-    hostname: String,
-    interfaces: Vec<Interface>,
+    hostname: &str,
     config: NetworkConfig,
 ) -> Result<(), anyhow::Error> {
-    let path = Path::new(output_dir);
+    let path = Path::new(output_dir).join(hostname);
 
-    fs::create_dir_all(path.join(&hostname)).context("Creating output dir")?;
+    fs::create_dir_all(&path).context("Creating output dir")?;
 
     config.iter().try_for_each(|(filename, content)| {
-        let path = path.join(&hostname).join(filename);
+        let path = path.join(filename);
 
         fs::write(path, content).context("Writing config file")
-    })?;
+    })
+}
+
+fn store_network_mapping(
+    output_dir: &str,
+    hostname: String,
+    interfaces: Vec<Interface>,
+) -> Result<(), anyhow::Error> {
+    let path = Path::new(output_dir);
 
     let mapping_file = fs::OpenOptions::new()
         .create(true)
@@ -218,7 +248,7 @@ mod tests {
 
     #[test]
     fn generate_config_fails_due_to_invalid_data() {
-        let err = generate_config("<invalid>".to_string()).unwrap_err();
+        let err = generate_config("<invalid>".to_string(), false).unwrap_err();
         assert!(err.to_string().contains("Invalid YAML string"))
     }
 
@@ -276,7 +306,7 @@ mod tests {
             },
         ];
 
-        let error = validate_interfaces(&interfaces).unwrap_err();
+        let error = validate_interfaces(&interfaces, false).unwrap_err();
         assert_eq!(error.to_string(), "No Ethernet interfaces were provided")
     }
 
@@ -315,11 +345,14 @@ mod tests {
             },
         ];
 
-        let error = validate_interfaces(&interfaces).unwrap_err();
         assert_eq!(
-            error.to_string(),
+            validate_interfaces(&interfaces, true)
+                .unwrap_err()
+                .to_string(),
             "Detected Ethernet interfaces without a MAC address: eth1, eth3"
-        )
+        );
+
+        assert!(validate_interfaces(&interfaces, false).is_ok())
     }
 
     #[test]
@@ -342,7 +375,8 @@ mod tests {
             },
         ];
 
-        assert!(validate_interfaces(&interfaces).is_ok())
+        assert!(validate_interfaces(&interfaces, true).is_ok());
+        assert!(validate_interfaces(&interfaces, false).is_ok());
     }
 
     #[test]

@@ -1,12 +1,12 @@
 # nm-configurator
 
-nm-configurator (or NMC) is a CLI tool which makes it easy to generate and apply NetworkManager configurations.
+nm-configurator (or nmc) is a CLI tool which makes it easy to generate and apply NetworkManager configurations.
 
 ## How to install it?
 
 ### Download from release
 
-Each release is published with NMC already built for `amd64` and `arm64` Linux systems:
+Each release is published with nmc already built for `amd64` and `arm64` Linux systems:
 
 ```shell
 $ curl -o nmc -L https://github.com/suse-edge/nm-configurator/releases/latest/download/nmc-linux-$(uname -m)
@@ -23,20 +23,33 @@ $ cargo build --release # only supports Linux based systems
 
 ## How to run it?
 
-### Generate config
-
-NMC depends on having the desired network state for all known nodes beforehand.
+nmc depends on having the desired network state for all known nodes beforehand.
 
 [NetworkManager](https://documentation.suse.com/sle-micro/5.5/html/SLE-Micro-all/cha-nm-configuration.html)
 is using connection profiles defined as files stored under `/etc/NetworkManager/system-connections`.
-In order to generate these config (*.nmconnection) files, NMC uses the
+
+In order to generate these config (*.nmconnection) files, nmc uses the
 [nmstate](https://github.com/nmstate/nmstate) library and requires a configuration directory as an input.
-This directory must contain the desired network state for all hosts in a <i>hostname</i>.yaml file format.
+This directory must contain the desired network state in one of the following file formats:
+
+1. A single or multiple `<hostname>.yaml` files containing the different configurations per host.
+   This method requires specifying the MAC addresses of all Ethernet interfaces for each host
+   in order to properly identify the relevant configurations when applying those.
+
+2. A single `_all.yaml` file containing the configurations to be applied to all hosts.
+   This method does not depend on MAC address matching.
+
+nmc is then able to apply the generated configurations by identifying and storing the relevant NetworkManager settings for a given host.
+
+Typically used with [Combustion](https://documentation.suse.com/sle-micro/5.5/single-html/SLE-Micro-deployment/#cha-images-combustion)
+in order to bootstrap multiple nodes using the same provisioning artefact instead of depending on different custom images per machine.
+
+### Per node configurations
 
 #### Prepare desired states
 
 ```shell
-mkdir "desired-states"
+mkdir -p desired-states
 
 cat <<- EOF > desired-states/node1.yaml
 interfaces:
@@ -89,21 +102,15 @@ EOF
 
 Please refer to the official nmstate docs for more extensive [examples](https://nmstate.io/examples.html).
 
-#### Run NMC
+#### Generate configurations
 
 ```shell
 $ ./nmc generate --config-dir desired-states --output-dir network-config
-[2024-04-03T07:47:50Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
-[2024-04-03T07:47:50Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
-[2024-04-03T07:47:50Z INFO  nmc::generate_conf] Generating config from "desired-states/node3.yaml"...
-[2024-04-03T07:47:50Z INFO  nmc] Successfully generated and stored network config
-```
+[2024-05-20T23:37:10Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
+[2024-05-20T23:37:10Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
+[2024-05-20T23:37:10Z INFO  nmc::generate_conf] Generating config from "desired-states/node3.yaml"...
+[2024-05-20T23:37:10Z INFO  nmc] Successfully generated and stored network config
 
-#### Examine results
-
-The output is the following:
-
-```shell
 $ find network-config | sort
 network-config
 network-config/host_config.yaml
@@ -119,7 +126,7 @@ There are separate directories for each host (identified by their input <i>hostn
 Each of these contains the configuration files for the desired network interfaces (e.g. `eth0`).
 
 The `host_config.yaml` file on the root level maps the hosts to all of their preconfigured interfaces.
-This is necessary in order for NMC to identify which host it is running on when applying the network configurations later.
+This is necessary in order for nmc to identify which host it is running on when applying the network configurations later.
 
 ```yaml
 - hostname: node1
@@ -139,27 +146,85 @@ This is necessary in order for NMC to identify which host it is running on when 
       interface_type: ethernet
 ```
 
-### Apply config
-
-NMC will use the previously generated configurations to identify and store the relevant NetworkManager settings for a given host.
-
-Typically used with [Combustion](https://documentation.suse.com/sle-micro/5.5/single-html/SLE-Micro-deployment/#cha-images-combustion)
-in order to bootstrap multiple nodes using the same provisioning artefact instead of depending on different custom images per machine.
-
-#### Prepare network configurations
+#### Apply configurations
 
 Simply copy the directory containing the results from `nmc generate` (`network-config` in the example above) to the target host.
 
-#### Run NMC
-
 ```shell
-$ ./nmc apply --config-dir network-config/
-[2024-04-03T07:50:55Z INFO  nmc::apply_conf] Identified host: node2
-[2024-04-03T07:50:55Z INFO  nmc::apply_conf] Processing interface 'eth1'...
-[2024-04-03T07:50:55Z INFO  nmc] Successfully applied config
+$ ./nmc apply --config-dir network-config
+[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Identified host: node2
+[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Set hostname: node2
+[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Processing interface 'eth1'...
+[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Using interface name 'enp0s1' instead of the preconfigured 'eth1'
+[2024-05-20T23:43:01Z INFO  nmc] Successfully applied config
+
+$ ls /etc/NetworkManager/system-connections
+enp0s1.nmconnection
 ```
 
 **NOTE:** Interface names during the installation of nodes might differ from the preconfigured logical ones.
-This is expected and NMC will rely on the MAC addresses and use the actual names for the NetworkManager
-configurations instead e.g. settings for interface with a predefined logical name `eth0` but actually named
-`eth2` will automatically be adjusted and stored to `/etc/NetworkManager/eth2.nmconnection`.
+This is expected and nmc will rely on the MAC addresses and use the actual names for the NetworkManager
+configurations instead e.g. settings for interface with a predefined logical name `eth1` but actually named
+`enp0s1` on the target node will automatically be adjusted and stored to `/etc/NetworkManager/enp0s1.nmconnection`.
+
+### Unified configurations
+
+There are occasions where relying on known MAC addresses is not an option.
+In these cases we can opt for the so-called _unified_ configurations which allows us
+to specify settings in an `_all.yaml` file which will then be applied across all provisioned nodes.
+
+```shell
+mkdir -p desired-states
+
+cat <<- EOF > desired-states/_all.yaml
+interfaces:
+- name: eth0
+  type: ethernet
+  state: up
+  ipv4:
+    dhcp: true
+    enabled: true
+  ipv6:
+    enabled: false
+- name: eth1
+  type: ethernet
+  state: up
+  ipv4:
+    address:
+    - ip: 10.0.0.1
+      prefix-length: 24
+    enabled: true
+    dhcp: false
+  ipv6:
+    enabled: false
+EOF
+```
+
+#### Generate configurations:
+
+```shell
+$ ./nmc generate --config-dir desired-states --output-dir network-config
+[2024-05-27T07:23:20Z INFO  nmc::generate_conf] Generating config from "desired-states/_all.yaml"...
+[2024-05-27T07:23:20Z INFO  nmc] Successfully generated and stored network config
+
+$ find network-config | sort
+network-config
+network-config/_all
+network-config/_all/eth0.nmconnection
+network-config/_all/eth1.nmconnection
+```
+
+**NOTE:** The `host_config.yaml` file will not be present since host mapping is not necessary.
+
+#### Apply configurations:
+
+```shell
+$ ./nmc apply --config-dir network-config
+[2024-05-27T07:24:03Z INFO  nmc::apply_conf] Applying unified config...
+[2024-05-27T07:24:03Z INFO  nmc::apply_conf] Copying file... "network-config/_all/eth0.nmconnection"
+[2024-05-27T07:24:03Z INFO  nmc::apply_conf] Copying file... "network-config/_all/eth1.nmconnection"
+[2024-05-27T07:24:03Z INFO  nmc] Successfully applied config
+
+$ ls /etc/NetworkManager/system-connections
+eth0.nmconnection eth1.nmconnection
+```
