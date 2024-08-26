@@ -14,5 +14,5 @@ env_logger = "0.11.5"
 log = "0.4.22"
 network-interface = "2.0.0"
 nmstate = { version = "2.2.35", features = ["gen_conf"] }
-serde = { version = "1.0.208", features = ["derive"] }
+serde = { version = "1.0.209", features = ["derive"] }
 serde_yaml = "0.9.34"
