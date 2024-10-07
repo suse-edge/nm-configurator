@@ -764,9 +764,9 @@ dependencies = [
 
 [[package]]
 name = "nmstate"
-version = "2.2.36"
+version = "2.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa6cd6a9190ca11fed3b21fa37d85c958d54cd8b9bf4612052fc2f1a266eb611"
+checksum = "4e87de7c59ad281a5707f68165b26da81cf79c52d3389171a8bec4f621fee6ff"
 dependencies = [
  "log",
  "nispor",
