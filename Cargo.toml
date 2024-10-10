@@ -13,6 +13,6 @@ clap = { version = "4.5.19", features = ["cargo"] }
 env_logger = "0.11.5"
 log = "0.4.22"
 network-interface = "2.0.0"
-nmstate = { version = "2.2.36", features = ["gen_conf"] }
+nmstate = { git = "https://github.com/koendelaat/nmstate.git", branch = "fix/ovs_vlan_trunk", features = ["gen_conf"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml = "0.9.34"
