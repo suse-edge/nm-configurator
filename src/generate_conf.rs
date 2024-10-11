@@ -3,12 +3,12 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Context};
-use log::{info, warn};
-use nmstate::{InterfaceType, NetworkState};
-use configparser::ini::Ini;
 use crate::types::{Host, Interface};
 use crate::{ALL_HOSTS_DIR, ALL_HOSTS_FILE, HOST_MAPPING_FILE};
+use anyhow::{anyhow, Context};
+use configparser::ini::Ini;
+use log::{info, warn};
+use nmstate::{InterfaceType, NetworkState};
 
 /// `NetworkConfig` contains the generated configurations in the
 /// following format: `Vec<(config_file_name, config_content>)`
@@ -89,18 +89,22 @@ fn generate_config(
     Ok((interfaces, config))
 }
 
-fn extract_interfaces(network_state: &NetworkState, config_files: &NetworkConfig) -> Vec<Interface> {
-
-    let mut config_files_map :HashMap<String, Vec<String>> = HashMap::new();
+fn extract_interfaces(
+    network_state: &NetworkState,
+    config_files: &NetworkConfig,
+) -> Vec<Interface> {
+    let mut config_files_map: HashMap<String, Vec<String>> = HashMap::new();
 
     for (_filename, content) in config_files {
         let mut config = Ini::new();
-        config.read(content.to_string()).expect("Unable to read nmconnection file");
+        config
+            .read(content.to_string())
+            .expect("Unable to read nmconnection file");
         let id = config.get("connection", "id");
         let interface_name = config.get("connection", "interface-name");
-        if id.is_some() && interface_name.is_some()
-        {
-            config_files_map.entry(interface_name.unwrap().to_string())
+        if id.is_some() && interface_name.is_some() {
+            config_files_map
+                .entry(interface_name.unwrap().to_string())
                 .or_insert_with(|| Vec::new())
                 .push(id.unwrap().clone());
         }
@@ -114,7 +118,10 @@ fn extract_interfaces(network_state: &NetworkState, config_files: &NetworkConfig
             logical_name: i.name().to_owned(),
             mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
-            connection_ids: config_files_map.get(i.name()).map(Vec::clone).or_else(|| Some(Vec::new()))
+            connection_ids: config_files_map
+                .get(i.name())
+                .map(Vec::clone)
+                .or_else(|| Some(Vec::new())),
         })
         .collect()
 }
@@ -190,11 +197,13 @@ fn store_network_mapping(
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::Path;
-    use crate::generate_conf::{extract_hostname, extract_interfaces, generate, generate_config, validate_interfaces};
+    use crate::generate_conf::{
+        extract_hostname, extract_interfaces, generate, generate_config, validate_interfaces,
+    };
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
+    use std::fs;
+    use std::path::Path;
 
     #[test]
     fn generate_successfully() -> Result<(), anyhow::Error> {
@@ -234,13 +243,17 @@ mod tests {
         assert_eq!(exp_hosts, hosts);
 
         // verify contents of *.nmconnection files based on interface.connection_ids
-        hosts.iter_mut()
+        hosts
+            .iter_mut()
             .flat_map(|h| h.interfaces.iter())
             .flat_map(|interface| &interface.connection_ids)
             .flat_map(|conns| conns.iter())
             .for_each(|conn_id| {
-                let exp_conn = fs::read_to_string(exp_output_path.join(format!("{conn_id}.nmconnection"))).unwrap();
-                let conn = fs::read_to_string(output_path.join(format!("{conn_id}.nmconnection"))).unwrap();
+                let exp_conn =
+                    fs::read_to_string(exp_output_path.join(format!("{conn_id}.nmconnection")))
+                        .unwrap();
+                let conn = fs::read_to_string(output_path.join(format!("{conn_id}.nmconnection")))
+                    .unwrap();
                 assert_eq!(exp_conn, conn);
             });
 
@@ -289,8 +302,10 @@ mod tests {
         "#,
         )?;
 
-        let config_files = vec![generate_config_file("eth1".to_string(), "eth1".to_string()),
-                                    generate_config_file("bridge0".to_string(), "bridge0".to_string())];
+        let config_files = vec![
+            generate_config_file("eth1".to_string(), "eth1".to_string()),
+            generate_config_file("bridge0".to_string(), "bridge0".to_string()),
+        ];
 
         let mut interfaces = extract_interfaces(&net_state, &config_files);
         interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
@@ -316,7 +331,7 @@ mod tests {
         Ok(())
     }
 
-    fn generate_config_file(logical_name: String, connection_id: String)  -> (String, String){
+    fn generate_config_file(logical_name: String, connection_id: String) -> (String, String) {
         let filename = format!("{connection_id}.nmconnection");
 
         let mut config = configparser::ini::Ini::new();

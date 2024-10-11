@@ -183,7 +183,10 @@ fn copy_connection_files(
 
     for interface in &host.interfaces {
         info!("Processing interface '{}'...", &interface.logical_name);
-        let connections = &interface.connection_ids.clone().unwrap_or(vec![interface.logical_name.clone()]);
+        let connections = &interface
+            .connection_ids
+            .clone()
+            .unwrap_or(vec![interface.logical_name.clone()]);
 
         for connection in connections {
             info!("Processing connection '{}'...", connection);
@@ -209,7 +212,7 @@ fn copy_connection_files(
             }
 
             store_connection_file(&filename, contents, destination_dir).context("Storing file")?;
-            }
+        }
     }
 
     Ok(())
