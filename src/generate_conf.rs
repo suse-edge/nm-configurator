@@ -100,13 +100,13 @@ fn extract_interfaces(
         config
             .read(content.to_string())
             .expect("Unable to read nmconnection file");
-        let id = config.get("connection", "id");
-        let interface_name = config.get("connection", "interface-name");
-        if id.is_some() && interface_name.is_some() {
-            config_files_map
-                .entry(interface_name.unwrap().to_string())
-                .or_insert_with(|| Vec::new())
-                .push(id.unwrap().clone());
+        if let Some(interface_name) = config.get("connection", "interface-name") {
+            if let Some(id) = config.get("connection", "id") {
+                config_files_map
+                    .entry(interface_name.to_string())
+                    .or_default()
+                    .push(id.clone());
+            }
         }
     }
 
@@ -120,7 +120,7 @@ fn extract_interfaces(
             interface_type: i.iface_type().to_string(),
             connection_ids: config_files_map
                 .get(i.name())
-                .map(Vec::clone)
+                .cloned()
                 .or_else(|| Some(Vec::new())),
         })
         .collect()
