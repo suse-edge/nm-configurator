@@ -1,0 +1,11 @@
+[connection]
+autoconnect=true
+autoconnect-slaves=-1
+id=ovs0-port
+interface-name=ovs0
+master=br1
+slave-type=ovs-bridge
+type=ovs-port
+uuid=dde94eac-b114-55b9-8f5f-7d53334bcb78
+
+[ovs-port]

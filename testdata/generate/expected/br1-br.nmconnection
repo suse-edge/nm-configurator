@@ -1,0 +1,21 @@
+[connection]
+autoconnect=true
+autoconnect-slaves=1
+id=br1-br
+interface-name=br1
+type=ovs-bridge
+uuid=327127e8-ee26-5178-bacd-ebbb191b1bdd
+
+[ipv4]
+dhcp-timeout=2147483647
+method=disabled
+
+[ipv6]
+dhcp-timeout=2147483647
+method=disabled
+
+[ovs-bridge]
+stp-enable=true
+
+[user]
+nmstate.interface.description=ovs bridge with eth1 as a port and ovs0 as an internal interface

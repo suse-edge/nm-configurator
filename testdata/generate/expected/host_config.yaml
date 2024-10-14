@@ -1,8 +1,27 @@
 - hostname: node1
   interfaces:
+    - logical_name: br1
+      connection_ids:
+        - br1-br
+      interface_type: ovs-bridge
     - logical_name: bridge0
+      connection_ids:
+        - bridge0
       mac_address: FE:C4:05:42:8B:AA
       interface_type: linux-bridge
+    - logical_name: ovs0
+      connection_ids:
+        - ovs0-port
+        - ovs0-if
+      interface_type: ovs-interface
     - logical_name: eth0
+      connection_ids:
+        - eth0
       mac_address: 0E:4D:C6:B8:C4:72
+      interface_type: ethernet
+    - logical_name: eth1
+      connection_ids:
+        - eth1-port
+        - eth1
+      mac_address: 5c:c7:c9:5e:fb:ec
       interface_type: ethernet

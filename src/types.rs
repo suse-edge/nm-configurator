@@ -13,6 +13,9 @@ pub struct Interface {
     pub(crate) logical_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    pub(crate) connection_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub(crate) mac_address: Option<String>,
     pub(crate) interface_type: String,
 }
