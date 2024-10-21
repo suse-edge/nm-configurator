@@ -183,9 +183,7 @@ fn copy_connection_files(
 
     for interface in host.interfaces {
         info!("Processing interface '{}'...", &interface.logical_name);
-        let connections = &interface
-            .connection_ids
-            .unwrap_or_else(Vec::new);
+        let connections = &interface.connection_ids.unwrap_or_else(Vec::new);
 
         for connection in connections {
             info!("Processing connection '{}'...", connection);
@@ -452,13 +450,19 @@ mod tests {
                             logical_name: "ovs0".to_string(),
                             mac_address: None,
                             interface_type: "ovs-interface".to_string(),
-                            connection_ids: Option::from(vec!["ovs0-port".to_string(), "ovs0-if".to_string()]),
+                            connection_ids: Option::from(vec![
+                                "ovs0-port".to_string(),
+                                "ovs0-if".to_string()
+                            ]),
                         },
                         Interface {
                             logical_name: "eth0".to_string(),
                             mac_address: Option::from("95:b2:92:88:1d:3f".to_string()),
                             interface_type: "ethernet".to_string(),
-                            connection_ids: Option::from(vec!["eth0".to_string(), "eth0-port".to_string()]),
+                            connection_ids: Option::from(vec![
+                                "eth0".to_string(),
+                                "eth0-port".to_string()
+                            ]),
                         },
                     ],
                 },
@@ -603,9 +607,13 @@ mod tests {
         };
         let detected_interfaces = HashMap::from([("eth2".to_string(), "eth4".to_string())]);
 
-        assert!(
-            copy_connection_files(host, detected_interfaces.clone(), source_dir, destination_dir).is_ok()
-        );
+        assert!(copy_connection_files(
+            host,
+            detected_interfaces.clone(),
+            source_dir,
+            destination_dir
+        )
+        .is_ok());
 
         let source_path = Path::new(source_dir).join("node1");
         let destination_path = Path::new(destination_dir);
@@ -617,7 +625,11 @@ mod tests {
 
             // Adjust the name and content for the "eth2"->"eth4" edge case.
             for (src_stem, dst_stem) in detected_interfaces.iter() {
-                if entry.path().file_stem().is_some_and(|stem| stem.to_str().unwrap().contains(src_stem)) {
+                if entry
+                    .path()
+                    .file_stem()
+                    .is_some_and(|stem| stem.to_str().unwrap().contains(src_stem))
+                {
                     filename = filename.replace(src_stem, dst_stem);
                     input = input.replace(src_stem, dst_stem);
                 }

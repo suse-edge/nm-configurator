@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
@@ -77,39 +76,40 @@ fn generate_config(
 ) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
     let network_state = NetworkState::new_from_yaml(&data)?;
 
+    let mut interfaces = extract_interfaces(&network_state);
+    validate_interfaces(&interfaces, require_mac_addresses)?;
+
     let config = network_state
         .gen_conf()?
         .get("NetworkManager")
         .ok_or_else(|| anyhow!("Invalid NM configuration"))?
         .to_owned();
 
-    let interfaces = extract_interfaces(&network_state, &config);
-    validate_interfaces(&interfaces, require_mac_addresses)?;
+    populate_connection_ids(&mut interfaces, &config);
 
     Ok((interfaces, config))
 }
 
-fn extract_interfaces(
-    network_state: &NetworkState,
-    config_files: &NetworkConfig,
-) -> Vec<Interface> {
-    let mut connection_ids: HashMap<String, Vec<String>> = HashMap::new();
-
-    for (_, content) in config_files {
+fn populate_connection_ids(interfaces: &mut [Interface], config: &NetworkConfig) {
+    for (_, content) in config {
         let mut config = Ini::new();
         config
             .read(content.to_string())
             .expect("Unable to read nmconnection file");
         if let Some(interface_name) = config.get("connection", "interface-name") {
             if let Some(id) = config.get("connection", "id") {
-                connection_ids
-                    .entry(interface_name.to_string())
-                    .or_default()
-                    .push(id);
+                interfaces
+                    .iter_mut()
+                    .filter(|x| x.logical_name == interface_name)
+                    .for_each(|interface| {
+                        interface.connection_ids.as_mut().unwrap().push(id.clone())
+                    });
             }
         }
     }
+}
 
+fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
     network_state
         .interfaces
         .iter()
@@ -118,10 +118,7 @@ fn extract_interfaces(
             logical_name: i.name().to_owned(),
             mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
-            connection_ids: connection_ids
-                .get(i.name())
-                .cloned()
-                .or_else(|| Some(Vec::new())),
+            connection_ids: Some(Vec::new()),
         })
         .collect()
 }
@@ -198,7 +195,8 @@ fn store_network_mapping(
 #[cfg(test)]
 mod tests {
     use crate::generate_conf::{
-        extract_hostname, extract_interfaces, generate, generate_config, validate_interfaces,
+        extract_hostname, extract_interfaces, generate, generate_config, populate_connection_ids,
+        validate_interfaces,
     };
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
@@ -307,7 +305,8 @@ mod tests {
             generate_config_file("bridge0".to_string(), "bridge0".to_string()),
         ];
 
-        let mut interfaces = extract_interfaces(&net_state, &config_files);
+        let mut interfaces = extract_interfaces(&net_state);
+        populate_connection_ids(&mut interfaces, &config_files);
         interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
 
         assert_eq!(
@@ -348,13 +347,13 @@ mod tests {
                 logical_name: "eth3.1365".to_string(),
                 mac_address: None,
                 interface_type: "vlan".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth3.1365".to_string()]),
             },
             Interface {
                 logical_name: "bond0".to_string(),
                 mac_address: None,
                 interface_type: "bond".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["bond0".to_string()]),
             },
         ];
 
@@ -369,37 +368,37 @@ mod tests {
                 logical_name: "eth0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:55".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth0".to_string()]),
             },
             Interface {
                 logical_name: "eth1".to_string(),
                 mac_address: None,
                 interface_type: "ethernet".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth1".to_string()]),
             },
             Interface {
                 logical_name: "eth2".to_string(),
                 mac_address: Option::from("00:11:22:33:44:56".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth2".to_string()]),
             },
             Interface {
                 logical_name: "eth3".to_string(),
                 mac_address: None,
                 interface_type: "ethernet".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth3".to_string()]),
             },
             Interface {
                 logical_name: "eth3.1365".to_string(),
                 mac_address: None,
                 interface_type: "vlan".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth3.1365".to_string()]),
             },
             Interface {
                 logical_name: "bond0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:58".to_string()),
                 interface_type: "bond".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["bond0".to_string()]),
             },
         ];
 
@@ -420,19 +419,19 @@ mod tests {
                 logical_name: "eth0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:55".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth0".to_string()]),
             },
             Interface {
                 logical_name: "eth0.1365".to_string(),
                 mac_address: None,
                 interface_type: "vlan".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["eth0.1365".to_string()]),
             },
             Interface {
                 logical_name: "bond0".to_string(),
                 mac_address: None,
                 interface_type: "bond".to_string(),
-                connection_ids: None,
+                connection_ids: Some(vec!["bond0".to_string()]),
             },
         ];
 
