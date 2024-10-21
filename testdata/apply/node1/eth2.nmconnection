@@ -1,23 +1,11 @@
 [connection]
-id             = eth2
-uuid           = ad451df9-e022-4ce4-9ba1-4bc691c9abc1
-type           = ethernet
-interface-name = eth2
+autoconnect=true
+autoconnect-slaves=-1
+id=eth2
+interface-name=eth2
+master=eth2
+slave-type=ovs-port
+type=802-3-ethernet
+uuid=0523c0a1-5f5e-5603-bcf2-68155d5d322e
 
 [ethernet]
-
-[ipv4]
-address1       = 192.168.123.3/24
-dns            = 192.168.123.100
-dns-priority   = 40
-method         = manual
-route1         = 0.0.0.0/0,192.168.123.3
-route1_options = table=254
-
-[ipv6]
-addr-gen-mode = eui64
-dhcp-duid     = ll
-dhcp-iaid     = mac
-method        = disabled
-
-[proxy]

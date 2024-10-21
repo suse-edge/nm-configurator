@@ -3,19 +3,48 @@
     - logical_name: eth0
       mac_address: 00:11:22:33:44:55
       interface_type: ethernet
+      connection_ids:
+        - eth0
     - logical_name: eth1
       mac_address: 00:11:22:33:44:58
       interface_type: ethernet
+      connection_ids:
+        - eth1
     - logical_name: eth2
       mac_address: 36:5e:6b:a2:ed:80
       interface_type: ethernet
+      connection_ids:
+        - eth2
     - logical_name: bond0
       mac_address: 00:11:22:AA:44:58
       interface_type: bond
+      connection_ids:
+        - bond0
 - hostname: node2
   interfaces:
     - logical_name: eth0
       mac_address: 36:5E:6B:A2:ED:81
       interface_type: ethernet
+      connection_ids:
+        - eth0
     - logical_name: eth0.1365
       interface_type: vlan
+      connection_ids:
+        - eth0.1365
+- hostname: node3
+  interfaces:
+    - logical_name: br1
+      connection_ids:
+        - br1-br
+      interface_type: ovs-bridge
+    - logical_name: ovs0
+      connection_ids:
+        - ovs0-port
+        - ovs0-if
+      interface_type: ovs-interface
+    - logical_name: eth0
+      connection_ids:
+        - eth0
+        - eth0-port
+      mac_address: 95:B2:92:88:1D:3F
+      interface_type: ethernet

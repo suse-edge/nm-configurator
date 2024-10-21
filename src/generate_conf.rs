@@ -93,19 +93,19 @@ fn extract_interfaces(
     network_state: &NetworkState,
     config_files: &NetworkConfig,
 ) -> Vec<Interface> {
-    let mut config_files_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut connection_ids: HashMap<String, Vec<String>> = HashMap::new();
 
-    for (_filename, content) in config_files {
+    for (_, content) in config_files {
         let mut config = Ini::new();
         config
             .read(content.to_string())
             .expect("Unable to read nmconnection file");
         if let Some(interface_name) = config.get("connection", "interface-name") {
             if let Some(id) = config.get("connection", "id") {
-                config_files_map
+                connection_ids
                     .entry(interface_name.to_string())
                     .or_default()
-                    .push(id.clone());
+                    .push(id);
             }
         }
     }
@@ -118,7 +118,7 @@ fn extract_interfaces(
             logical_name: i.name().to_owned(),
             mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
-            connection_ids: config_files_map
+            connection_ids: connection_ids
                 .get(i.name())
                 .cloned()
                 .or_else(|| Some(Vec::new())),

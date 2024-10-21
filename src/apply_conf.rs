@@ -181,12 +181,11 @@ fn copy_connection_files(
         .to_str()
         .ok_or_else(|| anyhow!("Determining host config path"))?;
 
-    for interface in &host.interfaces {
+    for interface in host.interfaces {
         info!("Processing interface '{}'...", &interface.logical_name);
         let connections = &interface
             .connection_ids
-            .clone()
-            .unwrap_or(vec![interface.logical_name.clone()]);
+            .unwrap_or_else(Vec::new);
 
         for connection in connections {
             info!("Processing connection '{}'...", connection);
@@ -309,7 +308,7 @@ mod tests {
                     logical_name: "eth0".to_string(),
                     mac_address: Option::from("00:11:22:33:44:55".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth0".to_string()]),
                 }],
             },
             Host {
@@ -318,7 +317,7 @@ mod tests {
                     logical_name: "".to_string(),
                     mac_address: Option::from("10:10:10:10:10:10".to_string()),
                     interface_type: "".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(Vec::new()),
                 }],
             },
         ];
@@ -345,7 +344,7 @@ mod tests {
                 logical_name: "eth0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:55".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: None,
+                connection_ids: Option::from(vec!["eth0".to_string()]),
             }]
         );
     }
@@ -359,7 +358,7 @@ mod tests {
                     logical_name: "eth0".to_string(),
                     mac_address: Option::from("10:20:30:40:50:60".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth0".to_string()]),
                 }],
             },
             Host {
@@ -368,7 +367,7 @@ mod tests {
                     logical_name: "".to_string(),
                     mac_address: Option::from("00:10:20:30:40:50".to_string()),
                     interface_type: "".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(Vec::new()),
                 }],
             },
         ];
@@ -401,25 +400,25 @@ mod tests {
                             logical_name: "eth0".to_string(),
                             mac_address: Option::from("00:11:22:33:44:55".to_string()),
                             interface_type: "ethernet".to_string(),
-                            connection_ids: None,
+                            connection_ids: Option::from(vec!["eth0".to_string()]),
                         },
                         Interface {
                             logical_name: "eth1".to_string(),
                             mac_address: Option::from("00:11:22:33:44:58".to_string()),
                             interface_type: "ethernet".to_string(),
-                            connection_ids: None,
+                            connection_ids: Option::from(vec!["eth1".to_string()]),
                         },
                         Interface {
                             logical_name: "eth2".to_string(),
                             mac_address: Option::from("36:5e:6b:a2:ed:80".to_string()),
                             interface_type: "ethernet".to_string(),
-                            connection_ids: None,
+                            connection_ids: Option::from(vec!["eth2".to_string()]),
                         },
                         Interface {
                             logical_name: "bond0".to_string(),
                             mac_address: Option::from("00:11:22:aa:44:58".to_string()),
                             interface_type: "bond".to_string(),
-                            connection_ids: None,
+                            connection_ids: Option::from(vec!["bond0".to_string()]),
                         },
                     ],
                 },
@@ -430,13 +429,36 @@ mod tests {
                             logical_name: "eth0".to_string(),
                             mac_address: Option::from("36:5e:6b:a2:ed:81".to_string()),
                             interface_type: "ethernet".to_string(),
-                            connection_ids: None,
+                            connection_ids: Option::from(vec!["eth0".to_string()]),
                         },
                         Interface {
                             logical_name: "eth0.1365".to_string(),
                             mac_address: None,
                             interface_type: "vlan".to_string(),
-                            connection_ids: None,
+                            connection_ids: Option::from(vec!["eth0.1365".to_string()]),
+                        },
+                    ],
+                },
+                Host {
+                    hostname: "node3".to_string(),
+                    interfaces: vec![
+                        Interface {
+                            logical_name: "br1".to_string(),
+                            mac_address: None,
+                            interface_type: "ovs-bridge".to_string(),
+                            connection_ids: Option::from(vec!["br1-br".to_string()]),
+                        },
+                        Interface {
+                            logical_name: "ovs0".to_string(),
+                            mac_address: None,
+                            interface_type: "ovs-interface".to_string(),
+                            connection_ids: Option::from(vec!["ovs0-port".to_string(), "ovs0-if".to_string()]),
+                        },
+                        Interface {
+                            logical_name: "eth0".to_string(),
+                            mac_address: Option::from("95:b2:92:88:1d:3f".to_string()),
+                            interface_type: "ethernet".to_string(),
+                            connection_ids: Option::from(vec!["eth0".to_string(), "eth0-port".to_string()]),
                         },
                     ],
                 },
@@ -453,31 +475,31 @@ mod tests {
                     logical_name: "eth0".to_string(),
                     mac_address: Option::from("00:11:22:33:44:55".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth0".to_string()]),
                 },
                 Interface {
                     logical_name: "eth0.1365".to_string(),
                     mac_address: None,
                     interface_type: "vlan".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth0.1365".to_string()]),
                 },
                 Interface {
                     logical_name: "eth2".to_string(),
                     mac_address: Option::from("00:11:22:33:44:56".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth2".to_string()]),
                 },
                 Interface {
                     logical_name: "eth2.bridge".to_string(),
                     mac_address: None,
                     interface_type: "linux-bridge".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth2.bridge".to_string()]),
                 },
                 Interface {
                     logical_name: "bond0".to_string(),
                     mac_address: Option::from("00:11:22:33:44:58".to_string()),
                     interface_type: "bond".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["bond0".to_string()]),
                 },
             ],
         };
@@ -545,38 +567,44 @@ mod tests {
                     logical_name: "eth0".to_string(),
                     mac_address: Option::from("00:11:22:33:44:55".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth0".to_string()]),
                 },
                 Interface {
                     logical_name: "eth0.1365".to_string(),
                     mac_address: None,
                     interface_type: "vlan".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth0.1365".to_string()]),
+                },
+                Interface {
+                    logical_name: "br1".to_string(),
+                    mac_address: None,
+                    interface_type: "ovs-bridge".to_string(),
+                    connection_ids: Option::from(vec!["br1-br".to_string()]),
                 },
                 Interface {
                     logical_name: "eth2".to_string(),
                     mac_address: Option::from("00:11:22:33:44:56".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth2".to_string(), "eth2-port".to_string()]),
                 },
                 Interface {
                     logical_name: "eth1".to_string(),
                     mac_address: Option::from("00:11:22:33:44:57".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["eth1".to_string()]),
                 },
                 Interface {
                     logical_name: "bond0".to_string(),
                     mac_address: Option::from("00:11:22:33:44:58".to_string()),
                     interface_type: "bond".to_string(),
-                    connection_ids: None,
+                    connection_ids: Option::from(vec!["bond0".to_string()]),
                 },
             ],
         };
         let detected_interfaces = HashMap::from([("eth2".to_string(), "eth4".to_string())]);
 
         assert!(
-            copy_connection_files(host, detected_interfaces, source_dir, destination_dir).is_ok()
+            copy_connection_files(host, detected_interfaces.clone(), source_dir, destination_dir).is_ok()
         );
 
         let source_path = Path::new(source_dir).join("node1");
@@ -588,9 +616,11 @@ mod tests {
             let mut input = fs::read_to_string(entry.path())?;
 
             // Adjust the name and content for the "eth2"->"eth4" edge case.
-            if entry.path().file_stem().is_some_and(|stem| stem == "eth2") {
-                filename = filename.replace("eth2", "eth4");
-                input = input.replace("eth2", "eth4");
+            for (src_stem, dst_stem) in detected_interfaces.iter() {
+                if entry.path().file_stem().is_some_and(|stem| stem.to_str().unwrap().contains(src_stem)) {
+                    filename = filename.replace(src_stem, dst_stem);
+                    input = input.replace(src_stem, dst_stem);
+                }
             }
 
             let output = fs::read_to_string(destination_path.join(&filename))?;
