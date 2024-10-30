@@ -15,7 +15,7 @@ type NetworkConfig = Vec<(String, String)>;
 
 /// Generate network configurations from all YAML files in the `config_dir`
 /// and store the result *.nmconnection files and host mapping (if applicable) under `output_dir`.
-pub(crate) fn generate(config_dir: &str, output_dir: &str) -> Result<(), anyhow::Error> {
+pub(crate) fn generate(config_dir: &str, output_dir: &str) -> anyhow::Result<()> {
     let files_count = fs::read_dir(config_dir)?.count();
 
     if files_count == 0 {
@@ -73,7 +73,7 @@ fn extract_hostname(path: &Path) -> Option<&OsStr> {
 fn generate_config(
     data: String,
     require_mac_addresses: bool,
-) -> Result<(Vec<Interface>, NetworkConfig), anyhow::Error> {
+) -> anyhow::Result<(Vec<Interface>, NetworkConfig)> {
     let network_state = NetworkState::new_from_yaml(&data)?;
 
     let mut interfaces = extract_interfaces(&network_state);
@@ -85,28 +85,58 @@ fn generate_config(
         .ok_or_else(|| anyhow!("Invalid NM configuration"))?
         .to_owned();
 
-    populate_connection_ids(&mut interfaces, &config);
+    populate_connection_ids(&mut interfaces, &config)?;
+    validate_connection_ids(&interfaces)?;
 
     Ok((interfaces, config))
 }
 
-fn populate_connection_ids(interfaces: &mut [Interface], config: &NetworkConfig) {
-    for (_, content) in config {
-        let mut config = Ini::new();
-        config
-            .read(content.to_string())
-            .expect("Unable to read nmconnection file");
-        if let Some(interface_name) = config.get("connection", "interface-name") {
-            if let Some(id) = config.get("connection", "id") {
-                interfaces
-                    .iter_mut()
-                    .filter(|x| x.logical_name == interface_name)
-                    .for_each(|interface| {
-                        interface.connection_ids.as_mut().unwrap().push(id.clone())
-                    });
-            }
-        }
-    }
+fn validate_connection_ids(interfaces: &[Interface]) -> anyhow::Result<()> {
+    let empty_connection_ids: Vec<String> = interfaces
+        .iter()
+        .filter(|i| i.connection_ids.is_empty())
+        .map(|i| i.logical_name.to_owned())
+        .collect();
+
+    if !empty_connection_ids.is_empty() {
+        return Err(anyhow!(
+            "Detected interfaces without connection files: {}",
+            empty_connection_ids.join(", ")
+        ));
+    };
+
+    Ok(())
+}
+
+fn populate_connection_ids(
+    interfaces: &mut [Interface],
+    config: &NetworkConfig,
+) -> anyhow::Result<()> {
+    config
+        .iter()
+        .filter(|(filename, _)| filename != "lo.nmconnection")
+        .try_for_each(|(filename, content)| {
+            let mut config = Ini::new();
+            config.read(content.to_string()).map_err(|e| anyhow!(e))?;
+            let interface_name = config.get("connection", "interface-name").ok_or_else(|| {
+                anyhow!("No interface-name found in connection file: {}", filename)
+            })?;
+            let connection_id = config.get("connection", "id").ok_or_else(|| {
+                anyhow!("No connection id found in connection file: {}", filename)
+            })?;
+            interfaces
+                .iter_mut()
+                .find(|x| x.logical_name == interface_name)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "No matching interface found for connection file: {}",
+                        filename
+                    )
+                })?
+                .connection_ids
+                .push(connection_id);
+            Ok(())
+        })
 }
 
 fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
@@ -118,7 +148,7 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
             logical_name: i.name().to_owned(),
             mac_address: i.base_iface().mac_address.clone(),
             interface_type: i.iface_type().to_string(),
-            connection_ids: Some(Vec::new()),
+            connection_ids: Vec::new(),
         })
         .collect()
 }
@@ -160,7 +190,7 @@ fn store_network_config(
     output_dir: &str,
     hostname: &str,
     config: NetworkConfig,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     let path = Path::new(output_dir).join(hostname);
 
     fs::create_dir_all(&path).context("Creating output dir")?;
@@ -176,7 +206,7 @@ fn store_network_mapping(
     output_dir: &str,
     hostname: String,
     interfaces: Vec<Interface>,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     let path = Path::new(output_dir);
 
     let mapping_file = fs::OpenOptions::new()
@@ -196,7 +226,7 @@ fn store_network_mapping(
 mod tests {
     use crate::generate_conf::{
         extract_hostname, extract_interfaces, generate, generate_config, populate_connection_ids,
-        validate_interfaces,
+        validate_connection_ids, validate_interfaces,
     };
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
@@ -210,7 +240,7 @@ mod tests {
         let out_dir = "_out";
         let output_path = Path::new("_out").join("node1");
 
-        assert!(generate(config_dir, out_dir).is_ok());
+        generate(config_dir, out_dir)?;
 
         // verify contents of lo.nmconnection files
         let exp_lo_conn = fs::read_to_string(exp_output_path.join("lo.nmconnection"))?;
@@ -245,7 +275,6 @@ mod tests {
             .iter_mut()
             .flat_map(|h| h.interfaces.iter())
             .flat_map(|interface| &interface.connection_ids)
-            .flat_map(|conns| conns.iter())
             .for_each(|conn_id| {
                 let exp_conn =
                     fs::read_to_string(exp_output_path.join(format!("{conn_id}.nmconnection")))
@@ -306,7 +335,7 @@ mod tests {
         ];
 
         let mut interfaces = extract_interfaces(&net_state);
-        populate_connection_ids(&mut interfaces, &config_files);
+        populate_connection_ids(&mut interfaces, &config_files).expect("populate ids");
         interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
 
         assert_eq!(
@@ -316,13 +345,13 @@ mod tests {
                     logical_name: "bridge0".to_string(),
                     mac_address: Option::from("FE:C4:05:42:8B:AB".to_string()),
                     interface_type: "linux-bridge".to_string(),
-                    connection_ids: Some(vec!["bridge0".to_string()]),
+                    connection_ids: vec!["bridge0".to_string()],
                 },
                 Interface {
                     logical_name: "eth1".to_string(),
                     mac_address: Option::from("FE:C4:05:42:8B:AA".to_string()),
                     interface_type: "ethernet".to_string(),
-                    connection_ids: Some(vec!["eth1".to_string()]),
+                    connection_ids: vec!["eth1".to_string()],
                 },
             ]
         );
@@ -347,13 +376,13 @@ mod tests {
                 logical_name: "eth3.1365".to_string(),
                 mac_address: None,
                 interface_type: "vlan".to_string(),
-                connection_ids: Some(vec!["eth3.1365".to_string()]),
+                connection_ids: vec!["eth3.1365".to_string()],
             },
             Interface {
                 logical_name: "bond0".to_string(),
                 mac_address: None,
                 interface_type: "bond".to_string(),
-                connection_ids: Some(vec!["bond0".to_string()]),
+                connection_ids: vec!["bond0".to_string()],
             },
         ];
 
@@ -368,37 +397,37 @@ mod tests {
                 logical_name: "eth0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:55".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: Some(vec!["eth0".to_string()]),
+                connection_ids: vec!["eth0".to_string()],
             },
             Interface {
                 logical_name: "eth1".to_string(),
                 mac_address: None,
                 interface_type: "ethernet".to_string(),
-                connection_ids: Some(vec!["eth1".to_string()]),
+                connection_ids: vec!["eth1".to_string()],
             },
             Interface {
                 logical_name: "eth2".to_string(),
                 mac_address: Option::from("00:11:22:33:44:56".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: Some(vec!["eth2".to_string()]),
+                connection_ids: vec!["eth2".to_string()],
             },
             Interface {
                 logical_name: "eth3".to_string(),
                 mac_address: None,
                 interface_type: "ethernet".to_string(),
-                connection_ids: Some(vec!["eth3".to_string()]),
+                connection_ids: vec!["eth3".to_string()],
             },
             Interface {
                 logical_name: "eth3.1365".to_string(),
                 mac_address: None,
                 interface_type: "vlan".to_string(),
-                connection_ids: Some(vec!["eth3.1365".to_string()]),
+                connection_ids: vec!["eth3.1365".to_string()],
             },
             Interface {
                 logical_name: "bond0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:58".to_string()),
                 interface_type: "bond".to_string(),
-                connection_ids: Some(vec!["bond0".to_string()]),
+                connection_ids: vec!["bond0".to_string()],
             },
         ];
 
@@ -413,30 +442,62 @@ mod tests {
     }
 
     #[test]
+    fn validate_interfaces_missing_connection_ids() {
+        let interfaces = vec![
+            Interface {
+                logical_name: "eth0".to_string(),
+                mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                interface_type: "ethernet".to_string(),
+                connection_ids: vec!["eth0".to_string()],
+            },
+            Interface {
+                logical_name: "eth0.1365".to_string(),
+                mac_address: None,
+                interface_type: "vlan".to_string(),
+                connection_ids: vec!["eth0.1365".to_string()],
+            },
+            Interface {
+                logical_name: "bond0".to_string(),
+                mac_address: None,
+                interface_type: "bond".to_string(),
+                connection_ids: Vec::new(),
+            },
+        ];
+
+        assert_eq!(
+            validate_connection_ids(&interfaces)
+                .unwrap_err()
+                .to_string(),
+            "Detected interfaces without connection files: bond0"
+        );
+    }
+
+    #[test]
     fn validate_interfaces_successfully() {
         let interfaces = vec![
             Interface {
                 logical_name: "eth0".to_string(),
                 mac_address: Option::from("00:11:22:33:44:55".to_string()),
                 interface_type: "ethernet".to_string(),
-                connection_ids: Some(vec!["eth0".to_string()]),
+                connection_ids: vec!["eth0".to_string()],
             },
             Interface {
                 logical_name: "eth0.1365".to_string(),
                 mac_address: None,
                 interface_type: "vlan".to_string(),
-                connection_ids: Some(vec!["eth0.1365".to_string()]),
+                connection_ids: vec!["eth0.1365".to_string()],
             },
             Interface {
                 logical_name: "bond0".to_string(),
                 mac_address: None,
                 interface_type: "bond".to_string(),
-                connection_ids: Some(vec!["bond0".to_string()]),
+                connection_ids: vec!["bond0".to_string()],
             },
         ];
 
         assert!(validate_interfaces(&interfaces, true).is_ok());
         assert!(validate_interfaces(&interfaces, false).is_ok());
+        assert!(validate_connection_ids(&interfaces).is_ok());
     }
 
     #[test]
