@@ -48,7 +48,7 @@ pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
             source_dir,
             STATIC_SYSTEM_CONNECTIONS_DIR,
         )
-        .context("Copying connection files")?;
+            .context("Copying connection files")?;
     }
 
     disable_wired_connections(CONFIG_DIR, RUNTIME_SYSTEM_CONNECTIONS_DIR)
@@ -141,10 +141,10 @@ fn copy_unified_connection_files(
 
         if entry.metadata()?.is_dir()
             || path
-                .extension()
-                .and_then(OsStr::to_str)
-                .unwrap_or_default()
-                .ne(CONNECTION_FILE_EXT)
+            .extension()
+            .and_then(OsStr::to_str)
+            .unwrap_or_default()
+            .ne(CONNECTION_FILE_EXT)
         {
             warn!("Ignoring unexpected entry: {path:?}");
             continue;
@@ -184,6 +184,10 @@ fn copy_connection_files(
     for interface in host.interfaces {
         info!("Processing interface '{}'...", &interface.logical_name);
         let connections = &interface.connection_ids;
+
+        if connections.is_empty() {
+            return Err(anyhow!("Missing connection ids for {}", &interface.logical_name));
+        }
 
         for connection in connections {
             info!("Processing connection '{}'...", connection);
@@ -606,8 +610,7 @@ mod tests {
             detected_interfaces.clone(),
             source_dir,
             destination_dir
-        )
-        .is_ok());
+        ).is_ok());
 
         let source_path = Path::new(source_dir).join("node1");
         let destination_path = Path::new(destination_dir);
@@ -633,6 +636,34 @@ mod tests {
 
             assert_eq!(input, output);
         }
+
+        // cleanup
+        fs::remove_dir_all(destination_dir)
+    }
+
+    #[test]
+    fn copy_connection_files_missing_connection_ids() -> io::Result<()> {
+        let source_dir = "testdata/apply";
+        let destination_dir = "_out2";
+
+        let host = Host {
+            hostname: "node1".to_string(),
+            interfaces: vec![
+                Interface {
+                    logical_name: "eth0".to_string(),
+                    mac_address: Option::from("00:11:22:33:44:55".to_string()),
+                    interface_type: "ethernet".to_string(),
+                    connection_ids: Vec::new(),
+                },
+            ],
+        };
+
+        assert!(copy_connection_files(
+            host,
+            HashMap::new(),
+            source_dir,
+            destination_dir
+        ).is_err_and(|e| e.to_string().contains("Missing connection ids")));
 
         // cleanup
         fs::remove_dir_all(destination_dir)
