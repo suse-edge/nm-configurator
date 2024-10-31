@@ -114,25 +114,27 @@ fn populate_connection_ids(
 ) -> anyhow::Result<()> {
     config
         .iter()
-        .filter(|(filename, _)| filename != "lo.nmconnection")
-        .try_for_each(|(filename, content)| {
-            let mut config = Ini::new();
-            config.read(content.to_string()).map_err(|e| anyhow!(e))?;
-            let interface_name = config.get("connection", "interface-name").ok_or_else(|| {
-                anyhow!("No interface-name found in connection file: {}", filename)
-            })?;
-            let connection_id = config.get("connection", "id").ok_or_else(|| {
-                anyhow!("No connection id found in connection file: {}", filename)
-            })?;
+        .map(|(f, content)| {
+            let mut c = Ini::new();
+            c.read(content.to_string()).map_err(|e| anyhow!(e))?;
+            Ok((f, c))
+        })
+        .filter(|x| {
+            !x.as_ref()
+                .is_ok_and(|(_, c)| c.get("connection", "type").is_some_and(|t| t == "loopback"))
+        })
+        .try_for_each(|x: anyhow::Result<(&String, Ini)>| {
+            let (f, c) = x?;
+            let interface_name = c
+                .get("connection", "interface-name")
+                .ok_or_else(|| anyhow!("No interface-name found in connection file: {}", f))?;
+            let connection_id = c
+                .get("connection", "id")
+                .ok_or_else(|| anyhow!("No connection id found in connection file: {}", f))?;
             interfaces
                 .iter_mut()
                 .find(|x| x.logical_name == interface_name)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "No matching interface found for connection file: {}",
-                        filename
-                    )
-                })?
+                .ok_or_else(|| anyhow!("No matching interface found for connection file: {}", f))?
                 .connection_ids
                 .push(connection_id);
             Ok(())
