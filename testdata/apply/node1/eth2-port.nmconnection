@@ -1,0 +1,11 @@
+[connection]
+autoconnect=true
+autoconnect-slaves=-1
+id=eth2-port
+interface-name=eth2
+master=br1
+slave-type=ovs-bridge
+type=ovs-port
+uuid=5e4ac41f-d8dd-5cbd-98b3-122629af91e0
+
+[ovs-port]
