@@ -1,6 +1,6 @@
 [connection]
 autoconnect=true
-autoconnect-slaves=-1
+autoconnect-slaves=1
 id=ovs0-port
 interface-name=ovs0
 master=br1
