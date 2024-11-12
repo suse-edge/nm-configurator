@@ -1,6 +1,6 @@
 [connection]
 autoconnect=true
-autoconnect-slaves=-1
+autoconnect-slaves=1
 id=eth1-port
 interface-name=eth1
 master=br1
