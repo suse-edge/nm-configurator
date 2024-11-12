@@ -106,10 +106,10 @@ Please refer to the official nmstate docs for more extensive [examples](https://
 
 ```shell
 $ ./nmc generate --config-dir desired-states --output-dir network-config
-[2024-05-20T23:37:10Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
-[2024-05-20T23:37:10Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
-[2024-05-20T23:37:10Z INFO  nmc::generate_conf] Generating config from "desired-states/node3.yaml"...
-[2024-05-20T23:37:10Z INFO  nmc] Successfully generated and stored network config
+[2024-11-12T09:05:57Z INFO  nmc::generate_conf] Generating config from "desired-states/node1.yaml"...
+[2024-11-12T09:05:59Z INFO  nmc::generate_conf] Generating config from "desired-states/node2.yaml"...
+[2024-11-12T09:05:59Z INFO  nmc::generate_conf] Generating config from "desired-states/node3.yaml"...
+[2024-11-12T09:05:59Z INFO  nmc] Successfully generated and stored network config
 
 $ find network-config | sort
 network-config
@@ -132,18 +132,25 @@ This is necessary in order for nmc to identify which host it is running on when 
 - hostname: node1
   interfaces:
     - logical_name: eth0
+      connection_ids:
+        - eth0
       mac_address: FE:C4:05:42:8B:AA
       interface_type: ethernet
 - hostname: node2
   interfaces:
     - logical_name: eth1
+      connection_ids:
+        - eth1
       mac_address: FE:C4:05:42:8B:AB
       interface_type: ethernet
 - hostname: node3
   interfaces:
     - logical_name: eth4
+      connection_ids:
+        - eth4
       mac_address: FE:C4:05:42:8B:AC
       interface_type: ethernet
+
 ```
 
 #### Apply configurations
@@ -152,11 +159,12 @@ Simply copy the directory containing the results from `nmc generate` (`network-c
 
 ```shell
 $ ./nmc apply --config-dir network-config
-[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Identified host: node2
-[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Set hostname: node2
-[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Processing interface 'eth1'...
-[2024-05-20T23:43:01Z INFO  nmc::apply_conf] Using interface name 'enp0s1' instead of the preconfigured 'eth1'
-[2024-05-20T23:43:01Z INFO  nmc] Successfully applied config
+[2024-11-12T09:10:10Z INFO  nmc::apply_conf] Identified host: node2
+[2024-11-12T09:10:10Z INFO  nmc::apply_conf] Set hostname: node2
+[2024-11-12T09:10:11Z INFO  nmc::apply_conf] Processing interface 'eth1'...
+[2024-11-12T09:10:11Z INFO  nmc::apply_conf] Processing connection 'eth1'...
+[2024-11-12T09:10:11Z INFO  nmc::apply_conf] Using interface name 'enp0s1' instead of the preconfigured 'eth1'
+[2024-11-12T09:10:11Z INFO  nmc] Successfully applied config
 
 $ ls /etc/NetworkManager/system-connections
 enp0s1.nmconnection
