@@ -13,7 +13,7 @@ clap = { version = "4.5.30", features = ["cargo"] }
 env_logger = "0.11.6"
 log = "0.4.26"
 network-interface = "2.0.0"
-nmstate = { version = "2.2.39", features = ["gen_conf"] }
+nmstate = { version = "2.2.41", features = ["gen_conf"] }
 serde = { version = "1.0.218", features = ["derive"] }
 serde_yaml = "0.9.34"
 configparser = "3.1.0"
