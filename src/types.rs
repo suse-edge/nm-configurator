@@ -7,7 +7,7 @@ pub struct Host {
     pub(crate) interfaces: Vec<Interface>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Interface {
     pub(crate) logical_name: String,

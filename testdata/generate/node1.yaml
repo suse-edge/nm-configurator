@@ -24,6 +24,7 @@ interfaces:
   - name: eth0
     type: ethernet
     state: up
+    identifier: mac-address
     mac-address: 0E:4D:C6:B8:C4:72
     ipv4:
       enabled: true
