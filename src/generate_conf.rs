@@ -120,15 +120,30 @@ fn populate_connection_ids(
             continue;
         }
 
-        let interface_name = c
-            .get("connection", "interface-name")
-            .ok_or_else(|| anyhow!("No interface-name found in connection file: {}", filename))?;
+        let interface_name = c.get("connection", "interface-name");
+        let mac_address = c.get("ethernet", "mac-address");
+        if mac_address.is_none() && interface_name.is_none() {
+            return Err(anyhow!(
+                "No identifier found in connection file: {} (expected interface-name or mac-address)",
+                filename
+            ));
+        }
         let connection_id = c
             .get("connection", "id")
             .ok_or_else(|| anyhow!("No connection id found in connection file: {}", filename))?;
         interfaces
             .iter_mut()
-            .find(|x| x.logical_name == interface_name)
+            .find(|x| {
+                if let Some(mac_address) = &mac_address {
+                    if let Some(imac) = x.mac_address.as_ref() {
+                        return imac.to_lowercase() == mac_address.to_lowercase();
+                    }
+                }
+                if let Some(iname) = &interface_name {
+                    return x.logical_name == *iname;
+                }
+                false
+            })
             .ok_or_else(|| {
                 anyhow!(
                     "No matching interface found for connection file: {}",
@@ -523,5 +538,52 @@ mod tests {
             extract_hostname("node1.example.com.yaml".as_ref()),
             Some("node1.example.com".as_ref())
         );
+    }
+
+    #[test]
+    fn test_populate_connection_ids() -> Result<(), anyhow::Error> {
+        let exp_output_path = Path::new("testdata/generate/expected");
+        let mut exp_hosts: Vec<Host> = serde_yaml::from_str(
+            fs::read_to_string(exp_output_path.join(HOST_MAPPING_FILE))?.as_str(),
+        )?;
+        let exp_ifaces = exp_hosts.pop().unwrap().interfaces;
+        let mut ifaces: Vec<Interface> = exp_ifaces.clone();
+        ifaces.iter_mut().for_each(|i| {
+            i.connection_ids = Vec::new();
+        });
+
+        let config = vec![
+            // By MAC Address case
+            (
+                "eth0.nmconnection".to_string(),
+                fs::read_to_string(exp_output_path.join("eth0.nmconnection"))?,
+            ),
+            // By Name case
+            (
+                "eth1.nmconnection".to_string(),
+                fs::read_to_string(exp_output_path.join("eth1.nmconnection"))?,
+            ),
+        ];
+        populate_connection_ids(&mut ifaces, &config).unwrap();
+
+        let fake_config = r#"[connection]
+            autoconnect=true
+            autoconnect-slaves=1
+            id=ovs0-port
+            master=br1
+            slave-type=ovs-bridge
+            type=ovs-port
+            uuid=dde94eac-b114-55b9-8f5f-7d53334bcb78
+
+            [ovs-port]"#
+            .to_string();
+        let config = vec![("fake.nmconnection".to_string(), fake_config)];
+        assert_eq!(
+            populate_connection_ids(&mut ifaces, &config)
+                .unwrap_err()
+                .to_string(),
+            "No identifier found in connection file: fake.nmconnection (expected interface-name or mac-address)"
+        );
+        Ok(())
     }
 }

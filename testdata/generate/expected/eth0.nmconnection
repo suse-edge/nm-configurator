@@ -2,7 +2,6 @@
 autoconnect=true
 autoconnect-slaves=-1
 id=eth0
-interface-name=eth0
 type=802-3-ethernet
 uuid=dfd202f5-562f-5f07-8f2a-a7717756fb70
 
@@ -18,4 +17,4 @@ method=link-local
 
 [ethernet]
 auto-negotiate=false
-cloned-mac-address=0E:4D:C6:B8:C4:72
+mac-address=0E:4D:C6:B8:C4:72
