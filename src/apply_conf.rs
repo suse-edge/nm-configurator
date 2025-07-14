@@ -193,7 +193,7 @@ fn copy_connection_files(
         }
 
         for connection in connections {
-            info!("Processing connection '{}'...", connection);
+            info!("Processing connection '{connection}'...");
             let mut filename = connection.clone();
 
             let filepath = keyfile_path(host_config_dir, &filename)
@@ -258,9 +258,9 @@ fn keyfile_path(dir: &str, filename: &str) -> Option<PathBuf> {
 
 fn disable_wired_connections(config_dir: &str, conn_dir: &str) -> Result<(), anyhow::Error> {
     let _ = fs::remove_dir_all(conn_dir);
-    fs::create_dir_all(conn_dir).context(format!("Recreating {} directory", conn_dir))?;
+    fs::create_dir_all(conn_dir).context(format!("Recreating {conn_dir} directory"))?;
 
-    fs::create_dir_all(config_dir).context(format!("Creating {} directory", config_dir))?;
+    fs::create_dir_all(config_dir).context(format!("Creating {config_dir} directory"))?;
 
     let config_path = Path::new(config_dir).join("no-auto-default.conf");
     let config_contents = "[main]\nno-auto-default=*\n";
