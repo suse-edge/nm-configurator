@@ -257,8 +257,11 @@ fn keyfile_path(dir: &str, filename: &str) -> Option<PathBuf> {
 }
 
 fn disable_wired_connections(config_dir: &str, conn_dir: &str) -> Result<(), anyhow::Error> {
-    let _ = fs::remove_dir_all(conn_dir);
-    fs::create_dir_all(conn_dir).context(format!("Recreating {conn_dir} directory"))?;
+    let path = Path::new(conn_dir);
+    if path.exists() {
+        let _ = fs::remove_dir_all(conn_dir);
+        fs::create_dir_all(conn_dir).context(format!("Recreating {conn_dir} directory"))?;
+    }
 
     fs::create_dir_all(config_dir).context(format!("Creating {config_dir} directory"))?;
 
@@ -278,7 +281,9 @@ fn disable_wired_connections(config_dir: &str, conn_dir: &str) -> Result<(), any
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::fs::File;
     use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, io};
 
     use network_interface::NetworkInterface;
@@ -291,17 +296,60 @@ mod tests {
 
     #[test]
     fn disable_wired_conn() {
-        assert!(disable_wired_connections("config", "connections").is_ok());
+        let base = std::env::temp_dir().join(format!(
+            "disable_wired_conn-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        assert!(fs::create_dir_all(&base).is_ok());
+        let config = base.join("config");
+        let connections = base.join("connections");
 
-        assert!(Path::new("config").exists());
-        assert!(Path::new("connections").exists());
+        // simulate a wired connection
+        assert!(fs::create_dir_all(&connections).is_ok());
+        let file_path = connections.join("foo.nmconnection");
+        assert!(File::create(&file_path).is_ok());
 
-        let config_contents = fs::read_to_string("config/no-auto-default.conf").unwrap();
+        assert!(
+            disable_wired_connections(config.to_str().unwrap(), connections.to_str().unwrap())
+                .is_ok()
+        );
+
+        assert!(config.exists());
+        assert!(connections.exists());
+        assert!(!file_path.exists());
+
+        let config_contents = fs::read_to_string(config.join("no-auto-default.conf")).unwrap();
         assert_eq!(config_contents, "[main]\nno-auto-default=*\n");
 
         // cleanup
-        assert!(fs::remove_dir_all("config").is_ok());
-        assert!(fs::remove_dir_all("connections").is_ok());
+        assert!(fs::remove_dir_all(&base).is_ok());
+    }
+
+    #[test]
+    fn disable_wired_conn_missing_conn() {
+        let base = std::env::temp_dir().join(format!(
+            "disable_wired_conn_missing_conn-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        assert!(fs::create_dir_all(&base).is_ok());
+        let config = base.join("config");
+
+        assert!(disable_wired_connections(config.to_str().unwrap(), "missing").is_ok());
+
+        assert!(config.exists());
+        assert!(!Path::new("missing").exists());
+
+        let config_contents = fs::read_to_string(config.join("no-auto-default.conf")).unwrap();
+        assert_eq!(config_contents, "[main]\nno-auto-default=*\n");
+
+        // cleanup
+        assert!(fs::remove_dir_all(&base).is_ok());
     }
 
     #[test]
