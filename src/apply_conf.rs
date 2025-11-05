@@ -174,6 +174,7 @@ fn copy_connection_files(
     source_dir: &str,
     destination_dir: &str,
 ) -> Result<(), anyhow::Error> {
+    // Ensure the destination directory exists
     fs::create_dir_all(destination_dir).context("Creating destination dir")?;
 
     let host_config_dir = Path::new(source_dir).join(&host.hostname);
@@ -201,20 +202,31 @@ fn copy_connection_files(
 
             let mut contents = fs::read_to_string(filepath).context("Reading file")?;
 
-            // Update the name and all references of the host NIC in the settings file if there is a difference from the static config.
-            match local_interfaces.get(&interface.logical_name) {
-                None => {}
-                Some(local_name) => {
-                    info!(
-                        "Using interface name '{}' instead of the preconfigured '{}'",
-                        local_name, interface.logical_name
-                    );
+            if let Some(local_name) = local_interfaces.get(&interface.logical_name) {
+                info!(
+                    "Using interface name '{}' instead of the preconfigured '{}'",
+                    local_name, interface.logical_name
+                );
 
-                    contents = contents.replace(&interface.logical_name, local_name);
-                    filename = filename.replace(&interface.logical_name, local_name);
+                // Replace interface name references
+                contents = contents.replace(&interface.logical_name, local_name);
+                filename = filename.replace(&interface.logical_name, local_name);
+
+                // --- VLAN parent replacement ---
+                if let Some((parent_original, _)) = interface.logical_name.split_once('.') {
+                    if let Some(parent_local) = local_interfaces.get(parent_original) {
+                        debug!(
+                            "Replacing VLAN parent reference from '{}' to '{}'",
+                            parent_original, parent_local
+                        );
+
+                        // Replace the parent interface name in the [vlan] section
+                        contents = contents.replace(parent_original, parent_local);
+                    }
                 }
             }
 
+            // Write the updated file to the destination directory
             store_connection_file(&filename, contents, destination_dir).context("Storing file")?;
         }
     }
@@ -723,11 +735,119 @@ mod tests {
             keyfile_path("some-dir", "eth0"),
             Some(PathBuf::from("some-dir/eth0.nmconnection"))
         );
+
         assert_eq!(
             keyfile_path("some-dir", "eth0.1234"),
             Some(PathBuf::from("some-dir/eth0.1234.nmconnection"))
         );
+
         assert!(keyfile_path("some-dir", "").is_none());
         assert!(keyfile_path("", "eth0").is_none());
+    }
+
+    #[test]
+    fn copy_connection_files_vlan_parent_replacement() -> std::io::Result<()> {
+        use std::collections::HashMap;
+        use std::fs;
+
+        // --- Prepare temporary directory structure ---
+        let temp_dir = std::env::temp_dir().join(format!(
+            "nmc_vlan_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source_dir = temp_dir.join("source");
+        let host_dir = source_dir.join("testnode");
+        let destination_dir = temp_dir.join("dest");
+
+        fs::create_dir_all(&host_dir)?;
+
+        // --- Create mock parent connection file (eth0) ---
+        let eth0_content = r#"[connection]
+id=eth0
+interface-name=eth0
+type=ethernet
+"#;
+        fs::write(host_dir.join("eth0.nmconnection"), eth0_content)?;
+
+        // --- Create mock VLAN connection file (eth0.1365) ---
+        let vlan_content = r#"[connection]
+id=eth0.1365
+interface-name=eth0.1365
+type=vlan
+
+[vlan]
+id=1365
+parent=eth0
+"#;
+        fs::write(host_dir.join("eth0.1365.nmconnection"), vlan_content)?;
+
+        // --- Define test host ---
+        let host = Host {
+            hostname: "testnode".to_string(),
+            interfaces: vec![
+                Interface {
+                    logical_name: "eth0".to_string(),
+                    mac_address: Some("00:11:22:33:44:55".to_string()),
+                    interface_type: "ethernet".to_string(),
+                    connection_ids: vec!["eth0".to_string()],
+                },
+                Interface {
+                    logical_name: "eth0.1365".to_string(),
+                    mac_address: None,
+                    interface_type: "vlan".to_string(),
+                    connection_ids: vec!["eth0.1365".to_string()],
+                },
+            ],
+        };
+
+        // --- Define simulated system-detected interface names ---
+        let detected_interfaces = HashMap::from([
+            ("eth0".to_string(), "eno1np0".to_string()),
+            ("eth0.1365".to_string(), "eno1np0.1365".to_string()),
+        ]);
+
+        // --- Run the actual function under test ---
+        copy_connection_files(
+            host,
+            detected_interfaces,
+            source_dir.to_str().unwrap(),
+            destination_dir.to_str().unwrap(),
+        )
+        .expect("copy_connection_files failed");
+
+        // --- Validate output file existence ---
+        let dest_file = destination_dir.join("eno1np0.1365.nmconnection");
+        assert!(
+            dest_file.exists(),
+            "Expected VLAN connection file to be created"
+        );
+
+        let output = fs::read_to_string(&dest_file)?;
+
+        // --- Define expected full content after replacement ---
+        let expected_content = r#"[connection]
+id=eno1np0.1365
+interface-name=eno1np0.1365
+type=vlan
+
+[vlan]
+id=1365
+parent=eno1np0
+"#;
+
+        // --- Verify full file content matches exactly (ignoring trailing newline differences) ---
+        assert_eq!(
+            output.trim_end(),
+            expected_content.trim_end(),
+            "VLAN connection file content does not match expected output"
+        );
+
+        // --- Cleanup ---
+        fs::remove_dir_all(&temp_dir)?;
+
+        Ok(())
     }
 }
