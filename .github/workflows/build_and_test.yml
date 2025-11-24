@@ -13,7 +13,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Format
         run: cargo fmt --all -- --check
       - name: Lint
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ lint ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Build
         run: cargo build
       - name: Test
