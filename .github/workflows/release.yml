@@ -19,7 +19,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Build x86_64 binary
         run: |
           docker build -t nmc:amd64 --platform linux/amd64 .
