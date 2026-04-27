@@ -515,9 +515,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.177"
+version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "linux-raw-sys"
@@ -674,6 +674,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nmc"
 version = "0.3.5"
 dependencies = [
@@ -690,13 +702,13 @@ dependencies = [
 
 [[package]]
 name = "nmstate"
-version = "2.2.59"
+version = "2.2.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecfee2afa2164164e6647e5fb59976aec3c7257551f0081b5db0957195128c04"
+checksum = "7fdd86e0b75078277cfd100a04933b5db16e8213c0b6b1ff6dae9c07ec3942de"
 dependencies = [
  "log",
  "nispor",
- "nix",
+ "nix 0.31.2",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -842,7 +854,7 @@ dependencies = [
  "netlink-packet-route",
  "netlink-proto",
  "netlink-sys",
- "nix",
+ "nix 0.30.1",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -1402,7 +1414,7 @@ dependencies = [
  "futures-core",
  "futures-lite",
  "hex",
- "nix",
+ "nix 0.30.1",
  "ordered-stream",
  "serde",
  "serde_repr",
