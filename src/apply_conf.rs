@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
 use log::{debug, info, warn};
-use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use nmstate::InterfaceType;
 
+use crate::interfaces::{list_local_interfaces, LocalInterface};
 use crate::types::Host;
 use crate::{ALL_HOSTS_DIR, HOST_MAPPING_FILE};
 
@@ -31,7 +31,7 @@ pub(crate) fn apply(source_dir: &str) -> Result<(), anyhow::Error> {
         let hosts = parse_hosts(source_dir).context("Parsing config")?;
         debug!("Loaded hosts config: {hosts:?}");
 
-        let network_interfaces = NetworkInterface::show()?;
+        let network_interfaces = list_local_interfaces()?;
         debug!("Retrieved network interfaces: {network_interfaces:?}");
 
         let host = identify_host(hosts, &network_interfaces)
@@ -73,13 +73,13 @@ fn parse_hosts(source_dir: &str) -> Result<Vec<Host>, anyhow::Error> {
 }
 
 /// Identify the preconfigured static host by matching the MAC address of at least one of the local network interfaces.
-fn identify_host(hosts: Vec<Host>, network_interfaces: &[NetworkInterface]) -> Option<Host> {
+fn identify_host(hosts: Vec<Host>, network_interfaces: &[LocalInterface]) -> Option<Host> {
     hosts.into_iter().find(|h| {
         h.interfaces.iter().any(|interface| {
             network_interfaces
                 .iter()
-                .filter(|nic| nic.mac_addr.is_some())
-                .any(|nic| nic.mac_addr == interface.mac_address)
+                .filter(|nic| nic.mac_address.is_some())
+                .any(|nic| nic.mac_address == interface.mac_address)
         })
     })
 }
@@ -91,7 +91,7 @@ fn identify_host(hosts: Vec<Host>, network_interfaces: &[NetworkInterface]) -> O
 ///     Desired VLAN "eth0.1365" -> Local "ens1f0.1365"
 fn detect_local_interfaces(
     host: &Host,
-    network_interfaces: Vec<NetworkInterface>,
+    network_interfaces: Vec<LocalInterface>,
 ) -> HashMap<String, String> {
     let mut local_interfaces = HashMap::new();
 
@@ -100,7 +100,7 @@ fn detect_local_interfaces(
         .filter(|interface| interface.interface_type == InterfaceType::Ethernet.to_string())
         .for_each(|interface| {
             let detected_interface = network_interfaces.iter().find(|nic| {
-                nic.mac_addr == interface.mac_address
+                nic.mac_address == interface.mac_address
                     && !host.interfaces.iter().any(|i| i.logical_name == nic.name)
             });
             match detected_interface {
@@ -298,12 +298,11 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::{fs, io};
 
-    use network_interface::NetworkInterface;
-
     use crate::apply_conf::{
         copy_connection_files, copy_unified_connection_files, detect_local_interfaces,
         disable_wired_connections, identify_host, keyfile_path, parse_hosts,
     };
+    use crate::interfaces::LocalInterface;
     use crate::types::{Host, Interface};
 
     #[test]
@@ -387,17 +386,13 @@ mod tests {
             },
         ];
         let interfaces = [
-            NetworkInterface {
+            LocalInterface {
                 name: "eth0".to_string(),
-                mac_addr: Some("00:11:22:33:44:55".to_string()),
-                addr: vec![],
-                index: 0,
+                mac_address: Some("00:11:22:33:44:55".to_string()),
             },
-            NetworkInterface {
+            LocalInterface {
                 name: "eth0".to_string(),
-                mac_addr: Some("00:10:20:30:40:50".to_string()),
-                addr: vec![],
-                index: 0,
+                mac_address: Some("00:10:20:30:40:50".to_string()),
             },
         ];
 
@@ -436,14 +431,61 @@ mod tests {
                 }],
             },
         ];
-        let interfaces = [NetworkInterface {
+        let interfaces = [LocalInterface {
             name: "eth0".to_string(),
-            mac_addr: Some("00:11:22:33:44:55".to_string()),
-            addr: vec![],
-            index: 0,
+            mac_address: Some("00:11:22:33:44:55".to_string()),
         }];
 
         assert!(identify_host(hosts, &interfaces).is_none())
+    }
+
+    #[test]
+    fn identify_host_with_bond_uses_permanent_macs() {
+        // Simulates the post-bond state where slave NICs share the bond's
+        // (cloned) MAC via the regular `address` file but expose their
+        // permanent MAC via `bonding_slave/perm_hwaddr`. The sysfs reader is
+        // expected to surface the permanent MAC, allowing host detection.
+        let hosts = vec![Host {
+            hostname: "node1".to_string(),
+            interfaces: vec![
+                Interface {
+                    logical_name: "eth2".to_string(),
+                    mac_address: Option::from("34:8a:b1:4b:16:e7".to_string()),
+                    interface_type: "ethernet".to_string(),
+                    connection_ids: vec!["eth2".to_string()],
+                },
+                Interface {
+                    logical_name: "eth3".to_string(),
+                    mac_address: Option::from("34:8a:b1:4b:16:e8".to_string()),
+                    interface_type: "ethernet".to_string(),
+                    connection_ids: vec!["eth3".to_string()],
+                },
+                Interface {
+                    logical_name: "bond99".to_string(),
+                    mac_address: None,
+                    interface_type: "bond".to_string(),
+                    connection_ids: vec!["bond99".to_string()],
+                },
+            ],
+        }];
+
+        let interfaces = [
+            LocalInterface {
+                name: "eth0".to_string(),
+                mac_address: Some("34:8a:b1:4b:16:e7".to_string()),
+            },
+            LocalInterface {
+                name: "eth1".to_string(),
+                mac_address: Some("34:8a:b1:4b:16:e8".to_string()),
+            },
+            LocalInterface {
+                name: "bond99".to_string(),
+                mac_address: Some("34:8a:b1:4b:16:e7".to_string()),
+            },
+        ];
+
+        let host = identify_host(hosts, &interfaces).unwrap();
+        assert_eq!(host.hostname, "node1");
     }
 
     #[test]
@@ -569,23 +611,17 @@ mod tests {
             ],
         };
         let interfaces = vec![
-            NetworkInterface {
+            LocalInterface {
                 name: "eth0".to_string(),
-                mac_addr: Some("00:11:22:33:44:55".to_string()),
-                addr: vec![],
-                index: 0,
+                mac_address: Some("00:11:22:33:44:55".to_string()),
             },
-            NetworkInterface {
+            LocalInterface {
                 name: "eth0.1365".to_string(), // VLAN
-                addr: vec![],
-                mac_addr: Some("00:11:22:33:44:55".to_string()),
-                index: 0,
+                mac_address: Some("00:11:22:33:44:55".to_string()),
             },
-            NetworkInterface {
+            LocalInterface {
                 name: "ens1f0".to_string(),
-                mac_addr: Some("00:11:22:33:44:56".to_string()),
-                addr: vec![],
-                index: 0,
+                mac_address: Some("00:11:22:33:44:56".to_string()),
             },
         ];
 
@@ -597,6 +633,60 @@ mod tests {
                 ("eth2.bridge".to_string(), "ens1f0.bridge".to_string())
             ])
         )
+    }
+
+    #[test]
+    fn detect_interface_differences_with_bond() {
+        // Mirrors the post-bond sysfs view: enslaved NICs expose their
+        // permanent MACs (eth0/eth1) while the bond master itself reports the
+        // cloned MAC. The bond is filtered out because it appears in the host
+        // config under its desired name.
+        let host = Host {
+            hostname: "node1".to_string(),
+            interfaces: vec![
+                Interface {
+                    logical_name: "eth2".to_string(),
+                    mac_address: Option::from("34:8a:b1:4b:16:e7".to_string()),
+                    interface_type: "ethernet".to_string(),
+                    connection_ids: vec!["eth2".to_string()],
+                },
+                Interface {
+                    logical_name: "eth3".to_string(),
+                    mac_address: Option::from("34:8a:b1:4b:16:e8".to_string()),
+                    interface_type: "ethernet".to_string(),
+                    connection_ids: vec!["eth3".to_string()],
+                },
+                Interface {
+                    logical_name: "bond99".to_string(),
+                    mac_address: None,
+                    interface_type: "bond".to_string(),
+                    connection_ids: vec!["bond99".to_string()],
+                },
+            ],
+        };
+        let interfaces = vec![
+            LocalInterface {
+                name: "eth0".to_string(),
+                mac_address: Some("34:8a:b1:4b:16:e7".to_string()),
+            },
+            LocalInterface {
+                name: "eth1".to_string(),
+                mac_address: Some("34:8a:b1:4b:16:e8".to_string()),
+            },
+            LocalInterface {
+                name: "bond99".to_string(),
+                mac_address: Some("34:8a:b1:4b:16:e7".to_string()),
+            },
+        ];
+
+        let local_interfaces = detect_local_interfaces(&host, interfaces);
+        assert_eq!(
+            local_interfaces,
+            HashMap::from([
+                ("eth2".to_string(), "eth0".to_string()),
+                ("eth3".to_string(), "eth1".to_string()),
+            ])
+        );
     }
 
     #[test]
