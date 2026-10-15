@@ -7,7 +7,7 @@ use crate::{ALL_HOSTS_DIR, ALL_HOSTS_FILE, HOST_MAPPING_FILE};
 use anyhow::{anyhow, Context};
 use configparser::ini::Ini;
 use log::{info, warn};
-use nmstate::{InterfaceType, NetworkState};
+use nmstate::{InterfaceIdentifier, InterfaceType, NetworkState};
 
 /// `NetworkConfig` contains the generated configurations in the
 /// following format: `Vec<(config_file_name, config_content>)`
@@ -85,7 +85,8 @@ fn generate_config(
         .ok_or_else(|| anyhow!("Invalid NM configuration"))?
         .to_owned();
 
-    populate_connection_ids(&mut interfaces, &config)?;
+    let mac_identified = extract_mac_identified_interfaces(&network_state);
+    populate_connection_ids(&mut interfaces, &mac_identified, &config)?;
     validate_connection_ids(&interfaces)?;
 
     Ok((interfaces, config))
@@ -108,8 +109,15 @@ fn validate_connection_ids(interfaces: &[Interface]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Matches the connection files to the interfaces they were generated for.
+///
+/// A connection file containing `ethernet.mac-address` belongs to an interface identified by
+/// its MAC address (listed in `mac_identified`). Any other interface may be configured to use the
+/// same MAC address (e.g. a bond using the MAC address of one of its ports) without being
+/// identified by it, so such interfaces are only matched by name.
 fn populate_connection_ids(
     interfaces: &mut [Interface],
+    mac_identified: &[(String, String)],
     config: &NetworkConfig,
 ) -> anyhow::Result<()> {
     for (filename, content) in config {
@@ -136,7 +144,12 @@ fn populate_connection_ids(
             .find(|x| {
                 if let Some(mac_address) = &mac_address {
                     if let Some(imac) = x.mac_address.as_ref() {
-                        return imac.to_lowercase() == mac_address.to_lowercase();
+                        let is_mac_identified = mac_identified.iter().any(|(name, iface_type)| {
+                            *name == x.logical_name && *iface_type == x.interface_type
+                        });
+                        if is_mac_identified {
+                            return imac.to_lowercase() == mac_address.to_lowercase();
+                        }
                     }
                 }
                 if let Some(iname) = &interface_name {
@@ -168,6 +181,16 @@ fn extract_interfaces(network_state: &NetworkState) -> Vec<Interface> {
             interface_type: i.iface_type().to_string(),
             connection_ids: Vec::new(),
         })
+        .collect()
+}
+
+/// Returns the (name, type) pairs of the interfaces identified by their MAC address.
+fn extract_mac_identified_interfaces(network_state: &NetworkState) -> Vec<(String, String)> {
+    network_state
+        .interfaces
+        .iter()
+        .filter(|i| i.base_iface().identifier == Some(InterfaceIdentifier::MacAddress))
+        .map(|i| (i.name().to_owned(), i.iface_type().to_string()))
         .collect()
 }
 
@@ -243,8 +266,8 @@ fn store_network_mapping(
 #[cfg(test)]
 mod tests {
     use crate::generate_conf::{
-        extract_hostname, extract_interfaces, generate, generate_config, populate_connection_ids,
-        validate_connection_ids, validate_interfaces,
+        extract_hostname, extract_interfaces, extract_mac_identified_interfaces, generate,
+        generate_config, populate_connection_ids, validate_connection_ids, validate_interfaces,
     };
     use crate::types::{Host, Interface};
     use crate::HOST_MAPPING_FILE;
@@ -353,7 +376,7 @@ mod tests {
         ];
 
         let mut interfaces = extract_interfaces(&net_state);
-        populate_connection_ids(&mut interfaces, &config_files).expect("populate ids");
+        populate_connection_ids(&mut interfaces, &[], &config_files).expect("populate ids");
         interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
 
         assert_eq!(
@@ -373,6 +396,55 @@ mod tests {
                 },
             ]
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn populate_connection_ids_with_controller_sharing_port_mac() -> Result<(), anyhow::Error> {
+        // bond0 is configured to use the MAC address of its MAC-identified port, and eth2
+        // is configured to use the MAC address of the other one. Neither is identified by it.
+        let net_state = nmstate::NetworkState::new_from_yaml(
+            r#"---
+        interfaces:
+          - name: port1
+            type: ethernet
+            identifier: mac-address
+            mac-address: 10:70:FD:F4:D5:5A
+          - name: port2
+            type: ethernet
+            identifier: mac-address
+            mac-address: 10:70:FD:F4:D5:5B
+          - name: eth2
+            type: ethernet
+            mac-address: 10:70:FD:F4:D5:5B
+          - name: bond0
+            type: bond
+            mac-address: 10:70:FD:F4:D5:5A
+            link-aggregation:
+              mode: active-backup
+              port:
+                - port1
+                - port2
+        "#,
+        )?;
+        let config = net_state.gen_conf()?.remove("NetworkManager").unwrap();
+
+        let mac_identified = extract_mac_identified_interfaces(&net_state);
+        let mut interfaces = extract_interfaces(&net_state);
+        interfaces.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
+
+        // The result must not depend on the order of the interfaces
+        for _ in 0..2 {
+            let mut ifaces = interfaces.clone();
+            populate_connection_ids(&mut ifaces, &mac_identified, &config)?;
+
+            for iface in &ifaces {
+                assert_eq!(iface.connection_ids, vec![iface.logical_name.clone()]);
+            }
+
+            interfaces.reverse();
+        }
 
         Ok(())
     }
@@ -564,7 +636,8 @@ mod tests {
                 fs::read_to_string(exp_output_path.join("eth1.nmconnection"))?,
             ),
         ];
-        populate_connection_ids(&mut ifaces, &config).unwrap();
+        let mac_identified = [("eth0".to_string(), "ethernet".to_string())];
+        populate_connection_ids(&mut ifaces, &mac_identified, &config).unwrap();
 
         let fake_config = r#"[connection]
             autoconnect=true
@@ -579,7 +652,7 @@ mod tests {
             .to_string();
         let config = vec![("fake.nmconnection".to_string(), fake_config)];
         assert_eq!(
-            populate_connection_ids(&mut ifaces, &config)
+            populate_connection_ids(&mut ifaces, &mac_identified, &config)
                 .unwrap_err()
                 .to_string(),
             "No identifier found in connection file: fake.nmconnection (expected interface-name or mac-address)"
