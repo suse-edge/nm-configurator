@@ -183,13 +183,13 @@ fn copy_connection_files(
         .ok_or_else(|| anyhow!("Determining host config path"))?;
 
     for interface in host.interfaces {
-        info!("Processing interface '{}'...", &interface.logical_name);
+        info!("Processing interface '{}'...", interface.logical_name);
         let connections = &interface.connection_ids;
 
         if connections.is_empty() {
             return Err(anyhow!(
                 "Missing connection ids for {}",
-                &interface.logical_name
+                interface.logical_name
             ));
         }
 
