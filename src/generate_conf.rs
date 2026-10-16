@@ -637,7 +637,7 @@ mod tests {
             ),
         ];
         let mac_identified = [("eth0".to_string(), "ethernet".to_string())];
-        populate_connection_ids(&mut ifaces, &mac_identified, &config).unwrap();
+        populate_connection_ids(&mut ifaces, &mac_identified, &config)?;
 
         let fake_config = r#"[connection]
             autoconnect=true

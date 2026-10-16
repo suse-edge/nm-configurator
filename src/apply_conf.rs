@@ -392,12 +392,14 @@ mod tests {
                 mac_addr: Some("00:11:22:33:44:55".to_string()),
                 addr: vec![],
                 index: 0,
+                internal: false,
             },
             NetworkInterface {
                 name: "eth0".to_string(),
                 mac_addr: Some("00:10:20:30:40:50".to_string()),
                 addr: vec![],
                 index: 0,
+                internal: false,
             },
         ];
 
@@ -441,6 +443,7 @@ mod tests {
             mac_addr: Some("00:11:22:33:44:55".to_string()),
             addr: vec![],
             index: 0,
+            internal: false,
         }];
 
         assert!(identify_host(hosts, &interfaces).is_none())
@@ -574,18 +577,21 @@ mod tests {
                 mac_addr: Some("00:11:22:33:44:55".to_string()),
                 addr: vec![],
                 index: 0,
+                internal: false,
             },
             NetworkInterface {
                 name: "eth0.1365".to_string(), // VLAN
                 addr: vec![],
                 mac_addr: Some("00:11:22:33:44:55".to_string()),
                 index: 0,
+                internal: false,
             },
             NetworkInterface {
                 name: "ens1f0".to_string(),
                 mac_addr: Some("00:11:22:33:44:56".to_string()),
                 addr: vec![],
                 index: 0,
+                internal: false,
             },
         ];
 
@@ -746,15 +752,15 @@ mod tests {
     }
 
     #[test]
-    fn copy_connection_files_vlan_parent_replacement() -> std::io::Result<()> {
+    fn copy_connection_files_vlan_parent_replacement() -> io::Result<()> {
         use std::collections::HashMap;
         use std::fs;
 
         // --- Prepare temporary directory structure ---
         let temp_dir = std::env::temp_dir().join(format!(
             "nmc_vlan_test_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
