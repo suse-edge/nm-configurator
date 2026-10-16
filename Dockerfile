@@ -1,6 +1,10 @@
-FROM registry.suse.com/bci/rust:1.83
+FROM registry.suse.com/bci/rust:1.98 AS build
 
-COPY . /
-WORKDIR /
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
 
-RUN cargo build --release --config net.git-fetch-with-cli=true
+RUN cargo build --release --locked
+
+FROM scratch
+COPY --from=build /src/target/release/nmc /nmc
