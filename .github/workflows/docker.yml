@@ -1,0 +1,38 @@
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/release.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "Dockerfile"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/release.yml"
+
+name: Docker Build
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build release binary
+        run: docker build --output type=local,dest=out .
+      - name: Smoke test
+        run: ./out/nmc --version
