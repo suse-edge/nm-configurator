@@ -464,6 +464,7 @@ dependencies = [
  "netlink-packet-generic",
  "netlink-proto",
  "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]
@@ -780,10 +781,11 @@ dependencies = [
 
 [[package]]
 name = "nmstate"
-version = "2.2.62"
+version = "2.2.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "554ea17902cd83a42bf1f0af39e4d4069e43d1ebe9733e775b7e84bf8dd10127"
+checksum = "e57af10dfcba440cb4ebb769e5db09791a3c6e5035b04aea73bd4c8457df3bef"
 dependencies = [
+ "genetlink",
  "log",
  "nispor",
  "nix 0.31.3",
@@ -1258,9 +1260,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.28.0"
+version = "1.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
+checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
 dependencies = [
  "getrandom",
  "js-sys",
